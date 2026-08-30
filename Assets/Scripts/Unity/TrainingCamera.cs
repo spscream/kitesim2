@@ -6,10 +6,7 @@ namespace Kitesim.Unity
     {
         [SerializeField] private Transform pilot;
         [SerializeField] private Transform kite;
-        [SerializeField] private Vector3 offset = new Vector3(0, 8f, -25f);
-        [SerializeField] private float smoothTime = 0.3f;
-
-        private Vector3 velocity;
+        [SerializeField] private float eyeHeight = 1.6f;
 
         public void Initialize(Transform pilotTransform, Transform kiteTransform)
         {
@@ -22,8 +19,7 @@ namespace Kitesim.Unity
             if (pilot == null)
                 return;
 
-            Vector3 desired = pilot.position + offset;
-            transform.position = Vector3.SmoothDamp(transform.position, desired, ref velocity, smoothTime);
+            transform.position = pilot.position + Vector3.up * eyeHeight;
 
             Vector3 lookTarget = pilot.position + Vector3.up * 5f;
             if (kite != null)

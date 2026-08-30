@@ -39,8 +39,8 @@ namespace Kitesim.Unity
             sim.PilotPosition = pilotTransform != null ? pilotTransform.position.ToVec3() : Vec3.Zero;
             sim.Wind = new WindField { Speed = 8.0, Direction = new Vec3(0, 0, 1) };
 
-            state = KiteState.FromSpherical(0, 15f * MathD.Deg2Rad, sim.Config.LineLength);
-            state.Position = sim.PilotPosition + new Vec3(0, 0.3, sim.Config.LineLength * 0.1);
+            state = KiteState.FromSpherical(0, 10f * MathD.Deg2Rad, sim.Config.LineLength);
+            state.Position = sim.PilotPosition + state.Position;
             state.Launched = false;
 
             if (visualTransform == null)
