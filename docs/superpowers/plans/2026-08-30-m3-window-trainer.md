@@ -2525,14 +2525,90 @@ namespace Kitesim.Unity
 }
 ```
 
-- [ ] **Step 4: Create the scene**
+- [ ] **Step 4: Create the scene from a script, not by hand**
 
-In the Unity editor:
-1. `File > New Scene > Basic (Built-in)`, save as `Assets/Scenes/WindowScene.unity`.
-2. Delete the default `Main Camera` and `Directional Light`.
-3. Create an empty GameObject named `Bootstrap`, add the `WindowSceneBootstrap` component.
-4. Assign `Assets/kitesim.inputactions` to its `Input Actions` field.
-5. Add `WindowScene` to `File > Build Profiles > Scene List`.
+The scene must be reproducible and must not be authored as YAML by hand. Write an editor
+script that builds it, then run that script in batchmode.
+
+Create `Assets/Editor/WindowSceneBuilder.cs`:
+
+```csharp
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace Kitesim.Unity.EditorTools
+{
+    /// <summary>
+    /// Builds the 2D wind-window scene. The scene holds one object: the bootstrap
+    /// builds the camera, the chart and the pilots at runtime, so there is nothing
+    /// else to serialise and nothing to drift out of sync with the code.
+    /// </summary>
+    public static class WindowSceneBuilder
+    {
+        private const string ScenePath = "Assets/Scenes/WindowScene.unity";
+        private const string ActionsPath = "Assets/kitesim.inputactions";
+
+        [MenuItem("Kitesim/Rebuild Window Scene")]
+        public static void Build()
+        {
+            var scene = EditorSceneManager.NewScene(
+                NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            var go = new GameObject("Bootstrap");
+            var bootstrap = go.AddComponent<WindowSceneBootstrap>();
+
+            var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(ActionsPath);
+            if (actions == null)
+                Debug.LogError($"WindowSceneBuilder: {ActionsPath} not found");
+
+            var serialized = new SerializedObject(bootstrap);
+            serialized.FindProperty("inputActions").objectReferenceValue = actions;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            RegisterInBuildSettings();
+            AssetDatabase.SaveAssets();
+
+            Debug.Log($"WindowSceneBuilder: wrote {ScenePath}");
+        }
+
+        private static void RegisterInBuildSettings()
+        {
+            foreach (var existing in EditorBuildSettings.scenes)
+            {
+                if (existing.path == ScenePath)
+                    return;
+            }
+
+            var scenes = new EditorBuildSettingsScene[EditorBuildSettings.scenes.Length + 1];
+            EditorBuildSettings.scenes.CopyTo(scenes, 0);
+            scenes[scenes.Length - 1] = new EditorBuildSettingsScene(ScenePath, true);
+            EditorBuildSettings.scenes = scenes;
+        }
+    }
+}
+```
+
+`WindowSceneBootstrap`'s `inputActions` field must be named exactly that for the
+`FindProperty` call to resolve; check it before running.
+
+Then run it headlessly. The editor is at `/mnt/g/work/Unity/6000.0.27f1/Editor/Unity.exe`
+and **it locks the project, so nobody may have the project open while this runs**:
+
+```bash
+"/mnt/g/work/Unity/6000.0.27f1/Editor/Unity.exe" \
+  -batchmode -quit -nographics \
+  -projectPath "G:\work\kitesim2" \
+  -executeMethod Kitesim.Unity.EditorTools.WindowSceneBuilder.Build \
+  -logFile - 2>&1 | tail -40
+```
+
+Expected: no compile errors, and a line `WindowSceneBuilder: wrote Assets/Scenes/WindowScene.unity`.
+
+This run doubles as the compile check for every script in Tasks 9-11 — a compile error
+anywhere in the Unity assembly fails it.
 
 - [ ] **Step 5: Verify by running**
 
@@ -2547,8 +2623,11 @@ Press Play. Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Assets/Scripts/Unity/WindowChartRenderer.cs Assets/Scripts/Unity/WindowKiteIcon.cs Assets/Scripts/Unity/WindowSceneBootstrap.cs Assets/Scenes/WindowScene.unity Assets/Scenes/WindowScene.unity.meta
-git commit -m "M3.3: 2D wind-window scene with four gamepad pilots"
+git add Assets/Scripts/Unity/WindowChartRenderer.cs Assets/Scripts/Unity/WindowKiteIcon.cs \
+        Assets/Scripts/Unity/WindowSceneBootstrap.cs Assets/Editor/WindowSceneBuilder.cs \
+        Assets/Scenes/WindowScene.unity ProjectSettings/EditorBuildSettings.asset \
+        Assets/Scripts/Unity/*.meta Assets/Editor Assets/Scenes/WindowScene.unity.meta
+git commit -m "M3.3: 2D wind-window scene with gamepad pilots"
 ```
 
 ---
