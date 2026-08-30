@@ -30,6 +30,8 @@ namespace Kitesim.Core
 
         public void Step(WindowKiteState state, double dt, double handLeft, double handRight, double walkAxis)
         {
+            UpdatePilot(dt, walkAxis);
+
             if (state.Landed)
                 return;
 
@@ -96,6 +98,35 @@ namespace Kitesim.Core
 
             return Config.SteeringGain * airspeed * steering
                    + Vec3.Dot(gravity, turnNormal) / airspeed;
+        }
+
+        /// <summary>
+        /// Move the pilot along the downwind axis. walkAxis is +1 for a full stride
+        /// downwind (toward the kite) and -1 for a full stride upwind (away from
+        /// it). Walking back is the flier's main tool for keeping a kite up in light
+        /// wind: it raises the wind seen relative to the pilot, which EffectiveWind
+        /// already accounts for.
+        /// </summary>
+        public void UpdatePilot(double dt, double walkAxis)
+        {
+            double axis = MathD.Clamp(walkAxis, -1.0, 1.0);
+            double speed = axis >= 0.0
+                ? axis * Config.WalkSpeedForward
+                : axis * Config.WalkSpeedBack;
+
+            Vec3 downwind = WindowChart.Center(Wind);
+            Vec3 velocity = downwind * speed;
+            Vec3 next = PilotPosition + velocity * dt;
+
+            double half = Config.FieldHalfSize;
+            double clampedX = MathD.Clamp(next.X, -half, half);
+            double clampedZ = MathD.Clamp(next.Z, -half, half);
+            Vec3 clamped = new Vec3(clampedX, next.Y, clampedZ);
+
+            // Recover the velocity that was actually realised, so a pilot pressed
+            // against the boundary stops feeding airspeed to the kite.
+            PilotVelocity = dt > 1e-12 ? (clamped - PilotPosition) / dt : Vec3.Zero;
+            PilotPosition = clamped;
         }
 
         public void Launch(WindowKiteState state)

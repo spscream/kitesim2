@@ -211,5 +211,93 @@ namespace Kitesim.Core.Tests
 
             Assert.Greater(state.LineWraps, 0);
         }
+
+        [Test]
+        public void WalkingBack_RaisesTheEffectiveWind()
+        {
+            var sim = MakeSim(5.0);
+            double still = sim.EffectiveWind(Vec3.Forward);
+
+            sim.PilotVelocity = new Vec3(0.0, 0.0, -1.7);
+            double walking = sim.EffectiveWind(Vec3.Forward);
+
+            Assert.AreEqual(5.0, still, 1e-12);
+            Assert.AreEqual(6.7, walking, 1e-12);
+        }
+
+        [Test]
+        public void WalkingForward_LowersTheEffectiveWind()
+        {
+            var sim = MakeSim(5.0);
+            sim.PilotVelocity = new Vec3(0.0, 0.0, 1.2);
+
+            Assert.AreEqual(3.8, sim.EffectiveWind(Vec3.Forward), 1e-12);
+        }
+
+        [Test]
+        public void WalkAxis_MovesThePilotAtTheConfiguredSpeeds()
+        {
+            var sim = MakeSim(5.0);
+
+            sim.UpdatePilot(1.0, -1.0);
+            Assert.AreEqual(-sim.Config.WalkSpeedBack, sim.PilotPosition.Z, 1e-12);
+            Assert.AreEqual(-sim.Config.WalkSpeedBack, sim.PilotVelocity.Z, 1e-12);
+
+            sim.PilotPosition = Vec3.Zero;
+            sim.UpdatePilot(1.0, 1.0);
+            Assert.AreEqual(sim.Config.WalkSpeedForward, sim.PilotPosition.Z, 1e-12);
+        }
+
+        [Test]
+        public void PilotCannotWalkOutOfTheField()
+        {
+            var sim = MakeSim(5.0);
+
+            for (int i = 0; i < 5000; i++)
+                sim.UpdatePilot(Dt, -1.0);
+
+            Assert.AreEqual(-sim.Config.FieldHalfSize, sim.PilotPosition.Z, 1e-9);
+            Assert.AreEqual(0.0, sim.PilotVelocity.Z, 1e-9,
+                "velocity must be zeroed at the boundary or the kite keeps gaining airspeed");
+        }
+
+        [Test]
+        public void TheGravityTurnDominatesWhenTheKiteIsSlow()
+        {
+            // This is the mechanism by which a kite drops out of the sky in light
+            // wind: the gravity turn goes as 1/v, so a slow kite flying across the
+            // window is whipped toward the ground within a second, while a fast one
+            // barely droops. Asserted on the rate itself, which is exact, rather
+            // than on an integrated trajectory.
+            var sim = MakeSim(5.0);
+            var slow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 6.0);
+            var fast = Flying(Vec3.Forward, new Vec3(1, 0, 0), 30.0);
+
+            double slowRate = sim.TurnRate(slow, 0.0, 0.0);
+            double fastRate = sim.TurnRate(fast, 0.0, 0.0);
+
+            Assert.AreEqual(9.80665 / 6.0, slowRate, 1e-9);
+            Assert.Greater(slowRate, fastRate * 4.0);
+            Assert.Greater(slowRate, 1.5,
+                "over a radian per second: the kite droops to the ground within a second");
+        }
+
+        [Test]
+        public void InLightWind_WalkingBackKeepsTheKiteFaster()
+        {
+            var passive = MakeSim(1.1);
+            var active = MakeSim(1.1);
+            var passiveKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
+            var activeKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
+
+            passive.Config.LineLength = 1e9;
+            active.Config.LineLength = 1e9;
+
+            Run(passive, passiveKite, 5.0);
+            Run(active, activeKite, 5.0, walk: -1.0);
+
+            Assert.Greater(activeKite.Speed, passiveKite.Speed * 1.5,
+                "walking back must be the dominant control in light wind");
+        }
     }
 }
