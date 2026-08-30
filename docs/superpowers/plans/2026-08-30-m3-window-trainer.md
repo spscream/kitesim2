@@ -1683,10 +1683,17 @@ namespace Kitesim.Core.Tests
             {
                 Wind = new WindField { Speed = 6.0, Direction = Vec3.Forward }
             };
+            // Start well above the horizon. Under this steering the kite spins on a
+            // circle of a couple of degrees, so from ground level it would land in
+            // about a third of a second and sit still for the rest of the run — the
+            // round trip would still match, but it would be matching a stationary
+            // point rather than a flight.
+            double beta = 45.0 * MathD.Deg2Rad;
+            Vec3 start = new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta));
             var state = new WindowKiteState
             {
-                Direction = Vec3.Forward,
-                Heading = Vec3.Up,
+                Direction = start,
+                Heading = KiteStateView.TangentUp(start),
                 Speed = 25.0,
                 Landed = false
             };
@@ -1700,6 +1707,8 @@ namespace Kitesim.Core.Tests
                 time += 0.02;
                 track.Record(time, 0, sim.View(state));
             }
+
+            Assert.IsFalse(state.Landed, "the round trip must be recorded from a kite that actually flew");
 
             var last = track.Sample(time, 0, 45.0);
             Assert.AreEqual(state.Direction.X, last.Direction.X, 1e-9);
