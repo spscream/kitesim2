@@ -1,0 +1,16 @@
+{
+    "name": "Kitesim.Unity",
+    "rootNamespace": "Kitesim.Unity",
+    "references": [
+        "Kitesim.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
