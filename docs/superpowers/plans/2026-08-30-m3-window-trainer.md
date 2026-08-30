@@ -1174,11 +1174,19 @@ Append these tests inside the `WindowSimTests` class, before the closing brace:
         public void LineWraps_CountFullTurns()
         {
             var sim = MakeSim(6.0);
-            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            // Start well above the horizon. Under full steering the heading turns
+            // about eleven times faster than the kite travels across the sphere, so
+            // it spins almost in place on a circle of roughly five degrees. Started
+            // at ground level it would dip below the horizon and land (Task 7) long
+            // before completing a full turn.
+            double beta = 45.0 * MathD.Deg2Rad;
+            var state = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 25.0);
             Assert.AreEqual(0, state.LineWraps);
 
             Run(sim, state, 6.0, handLeft: 0.0, handRight: 0.7);
 
+            Assert.IsFalse(state.Landed, "the kite must stay airborne to wrap its lines");
             Assert.Greater(state.LineWraps, 0);
         }
 ```
