@@ -2976,13 +2976,15 @@ All of these must hold before M4 starts:
 2. In `WindowScene`, four pilots can fly simultaneously on four gamepads.
 3. Kite speed at the window centre in 5 m/s wind settles between 25 and 35 m/s.
 4. Kite speed at the edge arc falls below 3 m/s.
-5. A slow kite flying across the window is turned toward the ground at over a radian per second, and walking upwind raises its speed by more than half. Together these are what makes light wind hard.
+5. A slow kite flying across the window is turned toward the ground at over a radian per second, and walking upwind raises its speed by more than half. Note that walking does **not** keep the kite airborne in this model — measured, it lands sooner, because the extra speed carries it further along its gravity-curved path per second. Steering is what keeps it up. See the spec's §4a correction.
 6. A recorded routine replays with the kites following the same paths.
 7. The pilot markers move on the field strip when the triggers are held and stop at the red boundary.
 
 ## Known limitations to state in the UI
 
-- The reduced model assumes the kite always flies nose-first. No stalls, no slack lines, no hovering, no trick elements.
+- The reduced model assumes the kite always flies nose-first. No stalls, no slack lines, no hovering, no trick elements. Launch and landing exist as state transitions, not as simulated dynamics.
+- **The hand sum does nothing.** Only the difference between the two hands is used, which gives steering. Pulling both hands in — line pumping, the standard light-wind technique — has no effect. The spec calls for it; it is deferred to M3.3, where the input layer exists and its magnitude can be calibrated with a pilot on the gamepad.
+- Walking sets speed and tension but does not keep the kite airborne; steering does. Measured in 1.1 m/s wind from 45 degrees flying crosswind, a kite lands at 6.6 s passively and at 3.4 s while walking fully back.
 - The zenith and the window edge carry a 5 % power floor because the `cos(theta)` law gives exactly zero there while a real kite still flies a little.
 - Line wraps are counted and displayed but have no effect on the physics.
 - Gravity affects the heading but not the speed along the flight path, so a kite pointed straight at the zenith climbs however light the wind. Crosswind flight, which is what a routine is made of, does behave correctly, because there the gravity turn dominates. Adding an along-track gravity term is an M4 decision: in the 6-DOF model it comes for free.
