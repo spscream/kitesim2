@@ -71,7 +71,13 @@ namespace Kitesim.Core
             return RadiusFromTheta(MathD.PI * 0.5, projection);
         }
 
-        /// <summary>Normalised power, cos(theta), at a chart radius. Clamped to [0, 1].</summary>
+        /// <summary>
+        /// Normalised power, cos(theta), at a chart radius. Clamped to [0, 1]. This is
+        /// the ideal law only: it returns exactly zero at the window edge, while
+        /// WindowSim.EffectiveWind applies a power floor there, so the kite the sim
+        /// actually flies has a little more power at the edge than the drawn iso-power
+        /// rings show.
+        /// </summary>
         public static double PowerAtRadius(double radius, ChartProjection projection)
         {
             return MathD.Clamp01(MathD.Cos(ThetaFromRadius(radius, projection)));

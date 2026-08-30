@@ -369,6 +369,20 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void EffectiveWind_NormalisesANonUnitWindDirection()
+        {
+            var sim = MakeSim(5.0);
+            // A non-unit Direction must not silently scale the wind speed: this
+            // still means "5 m/s toward +Z", not 10 m/s.
+            sim.Wind = new WindField { Speed = 5.0, Direction = new Vec3(0.0, 0.0, 2.0) };
+
+            Assert.AreEqual(5.0, sim.EffectiveWind(Vec3.Forward), 1e-12);
+            Assert.AreEqual(new Vec3(0.0, 0.0, 2.0).X, sim.Wind.Direction.X, 1e-12);
+            Assert.AreEqual(2.0, sim.Wind.Direction.Z, 1e-12,
+                "EffectiveWind must not mutate the caller's WindField");
+        }
+
+        [Test]
         public void WalkAxis_MovesThePilotAtTheConfiguredSpeeds()
         {
             var sim = MakeSim(5.0);

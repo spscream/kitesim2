@@ -8,8 +8,14 @@ namespace Kitesim.Core
     /// advances along a great circle, which parallel-transports the heading.
     ///
     /// This model assumes the kite always flies nose-first like a wing. It does not
-    /// reproduce stalls, slack lines, hovering, launching or landing dynamics. See
-    /// the spec, section 4.
+    /// reproduce stalls, slack lines, hovering or trick moves. Launching and landing
+    /// are present, but as state transitions rather than simulated dynamics:
+    /// touching the ground moves the kite to "landed" (Land()), and a launch command
+    /// returns it to flight (Launch()). See the spec, section 4.
+    ///
+    /// One WindowSim instance serves exactly one pilot: Step mutates PilotPosition
+    /// and PilotVelocity, so sharing an instance across two kites would walk the
+    /// pilot twice per frame.
     /// </summary>
     public class WindowSim
     {
@@ -79,10 +85,27 @@ namespace Kitesim.Core
         /// being blown backwards; the floor does not apply there, so the value stays
         /// negative or zero and the kite loses speed rather than being handed
         /// artificial power to keep flying toward the upwind horizon.
+        ///
+        /// This is a different law from the pre-existing WindWindow.EffectiveWindSpeed:
+        /// that one horizontalises the wind (cos(beta) * cos(phi), assuming Wind is
+        /// horizontal), this one dots direction with the full 3D wind vector. They
+        /// coincide for horizontal wind but diverge for tilted wind, since they then
+        /// disagree about where "the window centre" (the point of maximum power) is:
+        /// for a wind tilted 30 degrees up at 5 m/s, this method reaches the full
+        /// 5.00 m/s exactly where direction is aligned with the tilted wind, while
+        /// WindWindow.EffectiveWindSpeed only reaches 4.33 m/s at its own (horizontal)
+        /// window centre. This method uses the full 3D form because the kite's
+        /// position, not an assumed-horizontal wind, is what the sim actually tracks.
         /// </summary>
         public double EffectiveWind(Vec3 direction)
         {
-            Vec3 relativeWind = Wind.GetWindVector() - PilotVelocity;
+            // Wind.Direction is not guaranteed to be unit length (WindField does not
+            // enforce it, and WindowChart.Center normalises its own copy rather than
+            // mutating Wind), so normalise a local copy here rather than trust
+            // GetWindVector() -- otherwise a caller-supplied Direction with a
+            // magnitude other than 1 would silently scale the wind speed.
+            Vec3 windVector = Wind.Direction.Normalized() * Wind.Speed;
+            Vec3 relativeWind = windVector - PilotVelocity;
             double along = Vec3.Dot(relativeWind, direction);
             if (along < 0.0)
                 return along;
