@@ -53,7 +53,7 @@ namespace Kitesim.Unity
             playerMap?.Disable();
         }
 
-        void FixedUpdate()
+        void Update()
         {
             if (kite == null)
                 return;

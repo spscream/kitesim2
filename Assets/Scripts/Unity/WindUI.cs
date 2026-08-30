@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using Kitesim.Core;
 
 namespace Kitesim.Unity
@@ -31,13 +32,17 @@ namespace Kitesim.Unity
             const float speedStep = 1f;
             const float dirStep = 5f;
 
-            if (Input.GetKey(KeyCode.UpArrow))
+            var keyboard = Keyboard.current;
+            if (keyboard == null)
+                return;
+
+            if (keyboard[Key.UpArrow].isPressed)
                 speedKmh = Mathf.Clamp(speedKmh + speedStep * Time.deltaTime * 10f, 4f, 45f);
-            if (Input.GetKey(KeyCode.DownArrow))
+            if (keyboard[Key.DownArrow].isPressed)
                 speedKmh = Mathf.Clamp(speedKmh - speedStep * Time.deltaTime * 10f, 4f, 45f);
-            if (Input.GetKey(KeyCode.LeftArrow))
+            if (keyboard[Key.LeftArrow].isPressed)
                 directionDeg = Mathf.Repeat(directionDeg - dirStep * Time.deltaTime * 10f, 360f);
-            if (Input.GetKey(KeyCode.RightArrow))
+            if (keyboard[Key.RightArrow].isPressed)
                 directionDeg = Mathf.Repeat(directionDeg + dirStep * Time.deltaTime * 10f, 360f);
         }
 

@@ -112,6 +112,25 @@ namespace Kitesim.Unity
 
             state.Launched = true;
             state.Velocity = new Vec3(0, 2.0, 2.0);
+            Debug.Log($"[Kite] Launched at y={transform.position.y:F2}");
+        }
+
+        void OnGUI()
+        {
+            if (state == null)
+                return;
+
+            GUILayout.BeginArea(new Rect(Screen.width - 170, 10, 160, 70), GUI.skin.box);
+            if (state.Launched)
+            {
+                GUILayout.Label($"Alt: {transform.position.y:F1} m");
+                GUILayout.Label($"Speed: {state.Velocity.Length():F1} m/s");
+            }
+            else
+            {
+                GUILayout.Label("Press SPACE to launch");
+            }
+            GUILayout.EndArea();
         }
     }
 }
