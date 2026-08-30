@@ -214,6 +214,108 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void KiteLeftAlone_DriftsToAndParksAtTheWindowEdge()
+        {
+            // A real kite parked at the window edge hangs there motionless, and
+            // that is the basis of the standard strong-wind landing technique: fly
+            // to the edge, park, put it down nose-first (see docs/kite-anatomy.md
+            // section 3 and the design spec section 8). This test locks that in so
+            // a future change -- e.g. an along-track gravity term to make the kite
+            // "fall out" of the edge -- cannot silently remove it.
+            //
+            // Measured: a kite flying with zero steering input (gravity alone)
+            // from 45 degrees elevation drifts to theta = 90.725646 degrees and
+            // stops there. Checked over a 600 s run (30000 steps): both Direction
+            // and Speed are bit-identical from the moment it settles (around
+            // t = 50 s) to the end of the run -- a true fixed point, not a slow
+            // drift that happens to be small. That is because once Speed reaches
+            // exactly zero, Step's position update (sigma = Speed*dt/LineLength)
+            // is exactly zero too, so nothing about the state can change further.
+            var sim = MakeSim(6.0);
+            Vec3 center = WindowChart.Center(sim.Wind);
+            double beta = 45.0 * MathD.Deg2Rad;
+            var state = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 25.0);
+
+            int steps = (int)(600.0 / Dt);
+            for (int i = 0; i < steps; i++)
+            {
+                sim.Step(state, Dt, 0.0, 0.0, 0.0);
+                Assert.IsFalse(state.Landed, $"the parked kite must stay airborne, not touch down (step {i})");
+            }
+
+            double theta = MathD.Acos(MathD.Clamp(Vec3.Dot(state.Direction, center), -1.0, 1.0)) * MathD.Rad2Deg;
+            Assert.That(theta, Is.InRange(85.0, 95.0),
+                "a parked kite's angular distance from the window centre must stay near the 90-degree edge");
+            Assert.AreEqual(0.0, state.Speed, 1e-9,
+                "a parked kite settles to near-zero speed and stays there, not drifting onwards");
+        }
+
+        [Test]
+        public void ParkedAtTheEdge_SteeringTheNoseDownLandsIt()
+        {
+            // The pilot technique the parking behaviour exists to support: in
+            // strong wind, fly to the edge, park, then put the kite down under
+            // control by pointing its nose toward the ground (see
+            // docs/kite-anatomy.md section 3). The nose-down heading is reached
+            // by driving the hand inputs through Step, not by hand-placing
+            // Heading, so this exercises the actual control path.
+            //
+            // The parked starting state is constructed at phi = 90 degrees exactly
+            // (on the meridian that forms the theta = 90 edge for any elevation --
+            // see EffectiveWind), heading toward the zenith (psi = 0), which keeps
+            // EffectiveWind pinned at exactly the power floor. Measured: left alone
+            // there, Speed relaxes from 0 and settles at 1.8118 m/s within about
+            // 5 s and theta stays exactly 90.000 degrees (this is the "effective
+            // wind is at the floor, speed settles around 1.8 m/s" state referenced
+            // in the fix brief) -- a genuinely flyable parked state, unlike the
+            // upwind-of-the-edge parked state in
+            // KiteLeftAlone_DriftsToAndParksAtTheWindowEdge, where Speed sits at
+            // exactly zero and the kite cannot move at all.
+            //
+            // From there, holding handLeft = 0.2 (a moderate, sustained pull, well
+            // inside the 0.10-0.30 range measured to work -- 0.35 and above fails
+            // to land within 60 s) turns the nose from psi = 0 to psi around 177
+            // degrees (pointing at the ground, not exactly 180 because the
+            // constant steering input is balanced against the gravity term) within
+            // about 2 s, and holding it there measurably lands the kite: elevation
+            // descends from 40.7 degrees to 0 over 19.80 s, at a Speed that stays
+            // close to the measured 1.8118 m/s the entire way down.
+            var sim = MakeSim(6.0);
+            double beta = 30.0 * MathD.Deg2Rad;
+            double phi = 90.0 * MathD.Deg2Rad;
+            Vec3 direction = new Vec3(
+                MathD.Cos(beta) * MathD.Sin(phi),
+                MathD.Sin(beta),
+                MathD.Cos(beta) * MathD.Cos(phi)).Normalized();
+            var state = new WindowKiteState
+            {
+                Direction = direction,
+                Heading = KiteStateView.TangentUp(direction),
+                Speed = 0.0,
+                Landed = false
+            };
+
+            // Let the kite settle onto its parked, floor-driven speed before
+            // steering the nose down, matching how a pilot would find the kite
+            // already parked and then act.
+            Run(sim, state, 5.0);
+            Assert.AreEqual(1.8118, state.Speed, 0.01,
+                "the parked, floor-driven speed at the edge, measured for this exact start");
+
+            int steps = (int)(30.0 / Dt);
+            for (int i = 0; i < steps; i++)
+            {
+                sim.Step(state, Dt, handLeft: 0.2, handRight: 0.0, walkAxis: 0.0);
+                if (state.Landed)
+                    break;
+            }
+
+            Assert.IsTrue(state.Landed,
+                "steering the nose down from a parked edge state must land the kite within a reasonable time");
+            Assert.AreEqual(0.0, state.Speed, 1e-9);
+        }
+
+        [Test]
         public void HeadingTowardZenith_FliesUpTheMeridian()
         {
             var sim = MakeSim(6.0);
