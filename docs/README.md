@@ -1,4 +1,8 @@
 # Documentation
 
-Project documentation lives here. The main technical reference for the dual-line
-sport kite is `kite-anatomy.md` (M4).
+- `kite-anatomy.md` — предметный справочник: устройство двухстропного
+  спортивного змея, уздечка и POI, геометрия окна ветра и его проекция,
+  механика управления, ограничения из правил соревнований.
+- `superpowers/specs/` — проектные спеки. Актуальная:
+  `2026-08-30-kite-simulation-design.md` — физика уздечки и строп, два варианта
+  тренажёра (2D-окно и 3D от первого лица), порядок работ.
