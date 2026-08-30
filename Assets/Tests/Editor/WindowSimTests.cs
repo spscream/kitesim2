@@ -99,5 +99,117 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(1.0, state.Heading.Length(), 1e-9);
             Assert.AreEqual(0.0, Vec3.Dot(state.Direction, state.Heading), 1e-9);
         }
+
+        // Direction of turn is asserted on AccumulatedTurn, which is the unwrapped
+        // integral of the turn rate, and over a short window. HeadingRad comes from
+        // Atan2 and so folds at +/-180 degrees, and this kite turns far too fast for
+        // that to be safe: at full input in 6 m/s wind the rate is around 7.5 rad/s,
+        // which crosses the branch cut in under half a second. Asserting the
+        // unwrapped quantity keeps these tests valid if SteeringGain is ever retuned.
+
+        [Test]
+        public void PullingTheRightHand_TurnsTheKiteToThePilotsRight()
+        {
+            var sim = MakeSim(6.0);
+            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            Run(sim, state, 0.1, handLeft: 0.0, handRight: 0.7);
+
+            // Positive turn is from "toward zenith" toward "toward the pilot's right".
+            Assert.Greater(state.AccumulatedTurn, 0.2);
+            Assert.Greater(sim.View(state).HeadingRad, 0.2);
+        }
+
+        [Test]
+        public void PullingTheLeftHand_TurnsTheKiteToThePilotsLeft()
+        {
+            var sim = MakeSim(6.0);
+            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            Run(sim, state, 0.1, handLeft: 0.7, handRight: 0.0);
+
+            Assert.Less(state.AccumulatedTurn, -0.2);
+            Assert.Less(sim.View(state).HeadingRad, -0.2);
+        }
+
+        [Test]
+        public void TurnRate_IsLinearInSteeringInput()
+        {
+            var sim = MakeSim(6.0);
+            var half = Flying(Vec3.Forward, Vec3.Up, 25.0);
+            var full = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            double rateHalf = sim.TurnRate(half, 0.0, 0.35);
+            double rateFull = sim.TurnRate(full, 0.0, 0.7);
+
+            Assert.AreEqual(2.0, rateFull / rateHalf, 1e-9);
+        }
+
+        [Test]
+        public void TurnRate_IsLinearInAirspeed()
+        {
+            var sim = MakeSim(6.0);
+            var slow = Flying(Vec3.Forward, Vec3.Up, 10.0);
+            var fast = Flying(Vec3.Forward, Vec3.Up, 20.0);
+
+            // Straight up the meridian the gravity term vanishes, leaving only the
+            // steering term, which is what the oracle law says is linear in v_app.
+            double rateSlow = sim.TurnRate(slow, 0.0, 0.7);
+            double rateFast = sim.TurnRate(fast, 0.0, 0.7);
+
+            Assert.AreEqual(2.0, rateFast / rateSlow, 1e-9);
+        }
+
+        [Test]
+        public void GravityDoesNotTurnAKiteFlyingStraightUp()
+        {
+            var sim = MakeSim(6.0);
+            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            Assert.AreEqual(0.0, sim.TurnRate(state, 0.0, 0.0), 1e-12);
+        }
+
+        [Test]
+        public void GravityDroopsAKiteFlyingAcrossTheWindow()
+        {
+            var sim = MakeSim(6.0);
+            // Flying toward the pilot's right at the window centre.
+            var state = Flying(Vec3.Forward, new Vec3(1, 0, 0), 25.0);
+
+            double rate = sim.TurnRate(state, 0.0, 0.0);
+
+            // Positive rate turns the heading from "right" on toward "down".
+            Assert.Greater(rate, 0.0);
+            Assert.AreEqual(9.80665 / 25.0, rate, 1e-9);
+        }
+
+        [Test]
+        public void GravityTermMatchesTheClosedFormOfTheOracleLaw()
+        {
+            var sim = MakeSim(6.0);
+            double beta = 40.0 * MathD.Deg2Rad;
+            double psi = 120.0 * MathD.Deg2Rad;
+            double speed = 18.0;
+
+            Vec3 direction = new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)).Normalized();
+            Vec3 heading = KiteStateView.TangentUp(direction) * MathD.Cos(psi)
+                           + KiteStateView.TangentRight(direction) * MathD.Sin(psi);
+            var state = Flying(direction, heading, speed);
+
+            double expected = 9.80665 * MathD.Cos(beta) * MathD.Sin(psi) / speed;
+            Assert.AreEqual(expected, sim.TurnRate(state, 0.0, 0.0), 1e-9);
+        }
+
+        [Test]
+        public void LineWraps_CountFullTurns()
+        {
+            var sim = MakeSim(6.0);
+            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+            Assert.AreEqual(0, state.LineWraps);
+
+            Run(sim, state, 6.0, handLeft: 0.0, handRight: 0.7);
+
+            Assert.Greater(state.LineWraps, 0);
+        }
     }
 }

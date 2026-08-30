@@ -41,6 +41,13 @@ namespace Kitesim.Core
             double targetSpeed = Config.GlideRatio * effectiveWind;
             state.Speed += (targetSpeed - state.Speed) * MathD.Clamp01(dt / Config.SpeedLag);
 
+            // Rotate the heading inside the tangent plane.
+            double turnRate = TurnRate(state, handLeft, handRight);
+            double dPsi = turnRate * dt;
+            Vec3 turnNormal = Vec3.Cross(t, p);
+            t = t * MathD.Cos(dPsi) + turnNormal * MathD.Sin(dPsi);
+            state.AccumulatedTurn += dPsi;
+
             // Advance along the great circle in the heading direction. This form is
             // exact and parallel-transports the heading, so it has no singularity at
             // the zenith the way integrating (phi, beta) would.
@@ -65,6 +72,30 @@ namespace Kitesim.Core
             double along = Vec3.Dot(relativeWind, direction);
             double floor = Config.PowerFloor * Wind.Speed;
             return MathD.Max(along, floor);
+        }
+
+        /// <summary>
+        /// Turn rate about the tether axis, radians per second.
+        ///
+        /// The steering term is the Erhard-Strauch law: linear in the steering input
+        /// and in the apparent wind. The gravity term is derived rather than fitted.
+        /// The component of gravity perpendicular to the flight direction inside the
+        /// tangent plane, divided by speed, is the turn rate it produces; written in
+        /// angles that is g * cos(beta) * sin(psi) / v, exactly the published form.
+        /// </summary>
+        public double TurnRate(WindowKiteState state, double handLeft, double handRight)
+        {
+            double airspeed = MathD.Max(state.Speed, Config.MinAirspeed);
+
+            double steering = MathD.Clamp(
+                (handRight - handLeft) / (2.0 * Config.HandTravel), -1.0, 1.0);
+
+            // Unit tangent 90 degrees from the heading toward increasing psi.
+            Vec3 turnNormal = Vec3.Cross(state.Heading, state.Direction);
+            Vec3 gravity = new Vec3(0.0, -Gravity, 0.0);
+
+            return Config.SteeringGain * airspeed * steering
+                   + Vec3.Dot(gravity, turnNormal) / airspeed;
         }
 
         public void Launch(WindowKiteState state)
