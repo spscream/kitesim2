@@ -69,8 +69,10 @@ namespace Kitesim.Core
 
         /// <summary>
         /// World up projected into the tangent plane at the given direction: the
-        /// "toward zenith" axis of the local frame. Falls back to world forward
-        /// exactly at the zenith, where the frame is undefined.
+        /// "toward zenith" axis of the local frame. At the zenith or the nadir
+        /// (direction parallel to world up), that projection is zero and the frame
+        /// is genuinely undefined; in that case this returns an arbitrary unit
+        /// vector perpendicular to direction, Cross(direction, world forward).
         /// </summary>
         public static Vec3 TangentUp(Vec3 direction)
         {

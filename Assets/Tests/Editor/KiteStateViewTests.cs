@@ -75,5 +75,38 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(0.0, world.Y, 1e-12);
             Assert.AreEqual(45.0, world.Z, 1e-12);
         }
+
+        [Test]
+        public void TangentUp_AtZenithAndNadir_IsUnitAndPerpendicularToDirection()
+        {
+            foreach (Vec3 direction in new[] { Vec3.Up, -Vec3.Up })
+            {
+                Vec3 up = KiteStateView.TangentUp(direction);
+                Assert.AreEqual(1.0, up.Length(), 1e-12, $"direction={direction}");
+                Assert.AreEqual(0.0, Vec3.Dot(up, direction), 1e-12, $"direction={direction}");
+            }
+        }
+
+        [Test]
+        public void TangentRight_AtZenith_IsUnitAndPerpendicularToDirectionAndTangentUp()
+        {
+            Vec3 direction = Vec3.Up;
+            Vec3 up = KiteStateView.TangentUp(direction);
+            Vec3 right = KiteStateView.TangentRight(direction);
+
+            Assert.AreEqual(1.0, right.Length(), 1e-12);
+            Assert.AreEqual(0.0, Vec3.Dot(right, direction), 1e-12);
+            Assert.AreEqual(0.0, Vec3.Dot(right, up), 1e-12);
+        }
+
+        [Test]
+        public void AtZenith_ElevationAndHeadingAreFiniteAndElevationIsNinetyDegrees()
+        {
+            var view = Make(Vec3.Up, KiteStateView.TangentUp(Vec3.Up));
+
+            Assert.AreEqual(MathD.PI * 0.5, view.ElevationRad, 1e-12);
+            Assert.IsFalse(double.IsNaN(view.HeadingRad));
+            Assert.IsFalse(double.IsInfinity(view.HeadingRad));
+        }
     }
 }
