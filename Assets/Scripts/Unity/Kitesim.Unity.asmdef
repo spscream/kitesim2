@@ -2,7 +2,9 @@
     "name": "Kitesim.Unity",
     "rootNamespace": "Kitesim.Unity",
     "references": [
-        "Kitesim.Core"
+        "Kitesim.Core",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
