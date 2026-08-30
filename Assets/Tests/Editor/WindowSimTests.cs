@@ -204,11 +204,19 @@ namespace Kitesim.Core.Tests
         public void LineWraps_CountFullTurns()
         {
             var sim = MakeSim(6.0);
-            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            // Start well above the horizon. Under full steering the heading turns
+            // about eleven times faster than the kite travels across the sphere, so
+            // it spins almost in place on a circle of roughly five degrees. Started
+            // at ground level it would dip below the horizon and land (Task 7) long
+            // before completing a full turn.
+            double beta = 45.0 * MathD.Deg2Rad;
+            var state = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 25.0);
             Assert.AreEqual(0, state.LineWraps);
 
             Run(sim, state, 6.0, handLeft: 0.0, handRight: 0.7);
 
+            Assert.IsFalse(state.Landed, "the kite must stay airborne to wrap its lines");
             Assert.Greater(state.LineWraps, 0);
         }
 
@@ -298,6 +306,92 @@ namespace Kitesim.Core.Tests
 
             Assert.Greater(activeKite.Speed, passiveKite.Speed * 1.5,
                 "walking back must be the dominant control in light wind");
+        }
+
+        [Test]
+        public void FlyingIntoTheGround_Lands()
+        {
+            var sim = MakeSim(6.0);
+            var state = Flying(
+                new Vec3(0.0, MathD.Sin(0.2), MathD.Cos(0.2)),
+                new Vec3(0.0, -1.0, 0.0),
+                25.0);
+
+            Run(sim, state, 3.0);
+
+            Assert.IsTrue(state.Landed);
+            Assert.AreEqual(0.0, state.Direction.Y, 1e-9);
+            Assert.AreEqual(0.0, state.Speed, 1e-12);
+        }
+
+        [Test]
+        public void ALandedKiteDoesNotMove()
+        {
+            var sim = MakeSim(6.0);
+            var state = WindowKiteState.OnGround(0.0);
+            Vec3 before = state.Direction;
+
+            Run(sim, state, 3.0, handRight: 0.7);
+
+            Assert.AreEqual(before.X, state.Direction.X, 1e-12);
+            Assert.AreEqual(before.Y, state.Direction.Y, 1e-12);
+            Assert.AreEqual(before.Z, state.Direction.Z, 1e-12);
+        }
+
+        [Test]
+        public void LaunchingFromTheGround_Climbs()
+        {
+            var sim = MakeSim(6.0);
+            var state = WindowKiteState.OnGround(0.0);
+
+            sim.Launch(state);
+            Run(sim, state, 4.0);
+
+            Assert.IsFalse(state.Landed);
+            Assert.Greater(sim.View(state).ElevationRad, 20.0 * MathD.Deg2Rad);
+        }
+
+        [Test]
+        public void StaysStableOverTenMinutesOfSteering()
+        {
+            var sim = MakeSim(8.0);
+            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+
+            int steps = (int)(600.0 / Dt);
+            for (int i = 0; i < steps; i++)
+            {
+                double phase = MathD.Sin(i * Dt * 0.7) * 0.7;
+                sim.Step(state, Dt, -phase, phase, 0.0);
+
+                if (state.Landed)
+                    sim.Launch(state);
+            }
+
+            Assert.AreEqual(1.0, state.Direction.Length(), 1e-6);
+            Assert.IsFalse(double.IsNaN(state.Speed));
+            Assert.That(state.Speed, Is.InRange(0.0, 200.0));
+        }
+
+        [Test]
+        public void IsDeterministic()
+        {
+            var first = MakeSim(7.0);
+            var second = MakeSim(7.0);
+            var a = Flying(Vec3.Forward, Vec3.Up, 20.0);
+            var b = Flying(Vec3.Forward, Vec3.Up, 20.0);
+
+            for (int i = 0; i < 3000; i++)
+            {
+                double u = MathD.Sin(i * 0.013) * 0.7;
+                double walk = MathD.Cos(i * 0.007);
+                first.Step(a, Dt, -u, u, walk);
+                second.Step(b, Dt, -u, u, walk);
+            }
+
+            Assert.AreEqual(a.Direction.X, b.Direction.X);
+            Assert.AreEqual(a.Direction.Y, b.Direction.Y);
+            Assert.AreEqual(a.Direction.Z, b.Direction.Z);
+            Assert.AreEqual(a.Speed, b.Speed);
         }
     }
 }

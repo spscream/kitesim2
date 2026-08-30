@@ -61,6 +61,9 @@ namespace Kitesim.Core
 
             state.Direction = nextDirection.Normalized();
             state.Heading = Orthonormalize(nextHeading, state.Direction);
+
+            if (state.Direction.Y < 0.0)
+                Land(state);
         }
 
         /// <summary>
@@ -162,6 +165,17 @@ namespace Kitesim.Core
             if (corrected.SqrLength < 1e-12)
                 return KiteStateView.TangentUp(direction);
             return corrected.Normalized();
+        }
+
+        private static void Land(WindowKiteState state)
+        {
+            Vec3 horizontal = new Vec3(state.Direction.X, 0.0, state.Direction.Z);
+            state.Direction = horizontal.SqrLength < 1e-12
+                ? Vec3.Forward
+                : horizontal.Normalized();
+            state.Heading = KiteStateView.TangentUp(state.Direction);
+            state.Speed = 0.0;
+            state.Landed = true;
         }
     }
 }
