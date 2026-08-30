@@ -638,6 +638,9 @@ namespace Kitesim.Core
 Run: `cd .verify-core && dotnet test --filter KiteStateViewTests`
 Expected: `Passed! - Failed: 0, Passed: 7`
 
+Then run the whole suite: `cd .verify-core && dotnet test`
+Expected: `Passed! - Failed: 0, Passed: 26`
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -1034,7 +1037,7 @@ Expected: `Passed! - Failed: 0, Passed: 5`
 - [ ] **Step 7: Run the whole suite**
 
 Run: `cd .verify-core && dotnet test`
-Expected: `Passed! - Failed: 0, Passed: 31`
+Expected: `Passed! - Failed: 0, Passed: 34`
 
 - [ ] **Step 8: Commit**
 
@@ -1565,7 +1568,7 @@ Expected: `Passed! - Failed: 0, Passed: 24`
 - [ ] **Step 5: Run the whole suite**
 
 Run: `cd .verify-core && dotnet test`
-Expected: `Passed! - Failed: 0, Passed: 50`
+Expected: `Passed! - Failed: 0, Passed: 53`
 
 - [ ] **Step 6: Commit**
 
@@ -1912,7 +1915,7 @@ Expected: `Passed! - Failed: 0, Passed: 7`
 - [ ] **Step 5: Run the whole suite**
 
 Run: `cd .verify-core && dotnet test`
-Expected: `Passed! - Failed: 0, Passed: 57`
+Expected: `Passed! - Failed: 0, Passed: 60`
 
 - [ ] **Step 6: Commit**
 
@@ -2193,7 +2196,7 @@ namespace Kitesim.Unity
 - [ ] **Step 3: Verify the core still builds headlessly**
 
 Run: `cd .verify-core && dotnet test`
-Expected: `Passed! - Failed: 0, Passed: 57` — the Unity layer is not part of this project, so this only confirms nothing in Core regressed.
+Expected: `Passed! - Failed: 0, Passed: 60` — the Unity layer is not part of this project, so this only confirms nothing in Core regressed.
 
 - [ ] **Step 4: Verify in Unity**
 
@@ -2756,7 +2759,7 @@ Press Play. Expected:
 - [ ] **Step 4: Run the whole core suite one more time**
 
 Run: `cd .verify-core && dotnet test`
-Expected: `Passed! - Failed: 0, Passed: 57`
+Expected: `Passed! - Failed: 0, Passed: 60`
 
 - [ ] **Step 5: Commit**
 
@@ -2969,7 +2972,7 @@ git commit -m "M3.3: field strip with pilot markers, boundaries and tension rumb
 
 All of these must hold before M4 starts:
 
-1. `cd .verify-core && dotnet test` reports 57 passing tests.
+1. `cd .verify-core && dotnet test` reports 60 passing tests.
 2. In `WindowScene`, four pilots can fly simultaneously on four gamepads.
 3. Kite speed at the window centre in 5 m/s wind settles between 25 and 35 m/s.
 4. Kite speed at the edge arc falls below 3 m/s.
