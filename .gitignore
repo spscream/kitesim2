@@ -18,6 +18,7 @@ Thumbs.db
 *.csproj
 *.sln
 *.user
+!.verify-core/*.csproj
 
 # Blender backups
 *.blend1
