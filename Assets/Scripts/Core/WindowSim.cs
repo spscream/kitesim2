@@ -70,11 +70,22 @@ namespace Kitesim.Core
         /// Component of the wind relative to the pilot along the line. With a still
         /// pilot this is W * cos(theta); walking adds the pilot's own motion, which
         /// is how a flier keeps a kite up in light wind.
+        ///
+        /// The power floor (Config.PowerFloor) only ever raises this value, and only
+        /// downwind of the pilot (along positive): it exists so the zenith and the
+        /// edge of the window, where the cos(theta) law gives exactly zero, still
+        /// give a flying kite a little driving wind, matching a real kite still
+        /// pulling a little there. Upwind of the pilot (along negative) the kite is
+        /// being blown backwards; the floor does not apply there, so the value stays
+        /// negative or zero and the kite loses speed rather than being handed
+        /// artificial power to keep flying toward the upwind horizon.
         /// </summary>
         public double EffectiveWind(Vec3 direction)
         {
             Vec3 relativeWind = Wind.GetWindVector() - PilotVelocity;
             double along = Vec3.Dot(relativeWind, direction);
+            if (along < 0.0)
+                return along;
             double floor = Config.PowerFloor * Wind.Speed;
             return MathD.Max(along, floor);
         }
