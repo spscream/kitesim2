@@ -145,10 +145,16 @@ namespace Kitesim.Core.Tests
         public void DirectionAndHeadingStayUnitAndOrthogonal()
         {
             var sim = MakeSim(6.0);
-            var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
+            // Starting at Vec3.Forward (elevation zero) lands this kite at step
+            // 17 of the run, long before this steering pattern ever gets
+            // exercised, so start well above the horizon instead.
+            double beta = 45.0 * MathD.Deg2Rad;
+            var state = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 25.0);
 
             Run(sim, state, 20.0, handLeft: -0.3, handRight: 0.5);
 
+            Assert.IsFalse(state.Landed,
+                "the kite must still be flying at the end for this to test 20 s of integration hygiene");
             Assert.AreEqual(1.0, state.Direction.Length(), 1e-9);
             Assert.AreEqual(1.0, state.Heading.Length(), 1e-9);
             Assert.AreEqual(0.0, Vec3.Dot(state.Direction, state.Heading), 1e-9);
@@ -431,16 +437,39 @@ namespace Kitesim.Core.Tests
         {
             var first = MakeSim(7.0);
             var second = MakeSim(7.0);
-            var a = Flying(Vec3.Forward, Vec3.Up, 20.0);
-            var b = Flying(Vec3.Forward, Vec3.Up, 20.0);
+            // Starting at Vec3.Forward (elevation zero) lands this kite at
+            // 4.48 s of the original 60 s run, so most of the steps were
+            // no-ops and the comparison was 0.0 against 0.0. Starting at 45
+            // degrees keeps it airborne, but this exact steering pattern
+            // still lands it at about 24.1 s, so the run stops at 18 s, with
+            // about six seconds of margin.
+            double beta = 45.0 * MathD.Deg2Rad;
+            var a = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 20.0);
+            var b = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 20.0);
 
-            for (int i = 0; i < 3000; i++)
+            int steps = (int)(18.0 / Dt);
+            for (int i = 0; i < steps; i++)
             {
                 double u = MathD.Sin(i * 0.013) * 0.7;
                 double walk = MathD.Cos(i * 0.007);
                 first.Step(a, Dt, -u, u, walk);
                 second.Step(b, Dt, -u, u, walk);
             }
+
+            Assert.IsFalse(a.Landed,
+                "the kite must still be flying, or a landed sim trivially agrees with itself at rest");
+
+            // Assert.AreEqual(double, double) with no tolerance passes for
+            // NaN == NaN in .NET, so a sim that diverged to NaN would be
+            // reported deterministic. Guard each component explicitly.
+            Assert.IsFalse(double.IsNaN(a.Direction.X), "a.Direction.X is NaN");
+            Assert.IsFalse(double.IsNaN(a.Direction.Y), "a.Direction.Y is NaN");
+            Assert.IsFalse(double.IsNaN(a.Direction.Z), "a.Direction.Z is NaN");
+            Assert.IsFalse(double.IsNaN(a.Speed), "a.Speed is NaN");
+            Assert.IsFalse(double.IsNaN(b.Direction.X), "b.Direction.X is NaN");
+            Assert.IsFalse(double.IsNaN(b.Direction.Y), "b.Direction.Y is NaN");
+            Assert.IsFalse(double.IsNaN(b.Direction.Z), "b.Direction.Z is NaN");
+            Assert.IsFalse(double.IsNaN(b.Speed), "b.Speed is NaN");
 
             Assert.AreEqual(a.Direction.X, b.Direction.X);
             Assert.AreEqual(a.Direction.Y, b.Direction.Y);
