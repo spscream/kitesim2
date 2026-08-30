@@ -98,6 +98,28 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void SamplingOutsideTheRangeCarriesLineWraps()
+        {
+            // Sample() has two paths that build a KiteStateView: the interpolating
+            // path in the middle of the recording, and ToView, used for a request
+            // before the first frame or after the last one. Both existing outside-
+            // range tests (this one's Speed-only sibling above, and
+            // ALandedFrameReplaysAsLanded) only exercised ToView incidentally,
+            // without ever giving it a nonzero LineWraps to carry, so a regression
+            // that hardcoded LineWraps to 0 in ToView would leave the whole suite
+            // green. Exercise it directly with distinct, nonzero counts on both
+            // ends of the recording.
+            var track = new Track();
+            track.Record(1.0, 0, View(Vec3.Forward, Vec3.Up, 10.0, lineWraps: 2));
+            track.Record(2.0, 0, View(Vec3.Forward, Vec3.Up, 30.0, lineWraps: 7));
+
+            Assert.AreEqual(2, track.Sample(-5.0, 0, 45.0).LineWraps,
+                "before the first frame must use ToView on the first frame, wraps included");
+            Assert.AreEqual(7, track.Sample(99.0, 0, 45.0).LineWraps,
+                "past the last frame must use ToView on the last frame, wraps included");
+        }
+
+        [Test]
         public void InterpolatedDirectionsStayUnitLength()
         {
             var track = new Track();
