@@ -465,6 +465,20 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void ALandedKiteReportsZeroTension()
+        {
+            // View() used to compute tension from an airspeed floored at
+            // Config.MinAirspeed, which exists only for the gravity turn term's
+            // denominator (see WindowConfiguration), so a landed kite (Speed == 0)
+            // reported nonzero tension. Plan task 13 drives icon colour and gamepad
+            // rumble from Tension, so a grounded kite would buzz.
+            var sim = MakeSim(6.0);
+            var state = WindowKiteState.OnGround(0.0);
+
+            Assert.AreEqual(0.0, sim.View(state).Tension, 1e-12);
+        }
+
+        [Test]
         public void LaunchingFromTheGround_Climbs()
         {
             var sim = MakeSim(6.0);

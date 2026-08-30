@@ -155,8 +155,11 @@ namespace Kitesim.Core
 
         public KiteStateView View(WindowKiteState state)
         {
-            double airspeed = MathD.Max(state.Speed, Config.MinAirspeed);
-            double tension = 0.5 * Config.AirDensity * airspeed * airspeed
+            // Config.MinAirspeed is documented as existing only for the gravity turn
+            // term's denominator; using the floored value here would report a
+            // grounded (or merely slow) kite pulling nonzero line tension. Use the
+            // kite's actual speed, which is exactly zero for a landed kite.
+            double tension = 0.5 * Config.AirDensity * state.Speed * state.Speed
                              * Config.SailArea * Config.ForceCoefficient;
 
             return new KiteStateView(
