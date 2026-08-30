@@ -74,6 +74,65 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void DrivenPastTheWindowEdge_SpeedNeverGoesNegative()
+        {
+            // This model has no reverse flight: EffectiveWind is negative upwind of
+            // the window edge (deliberately -- see EffectiveWind's comment), which
+            // pulls targetSpeed negative and, before the Speed clamp in Step, pulled
+            // Speed itself negative -- a negative Speed then advances the kite
+            // backwards along its heading, which a real kite does not do.
+            //
+            // Measured on the pre-fix model (Speed not clamped): a sweep of 40
+            // steering patterns (frequency 0.1-2.0 Hz, amplitude 0.2-1.0, wind
+            // 6 m/s) driving a kite from just past the window edge reached Speed as
+            // low as -27.0 m/s within a 35 s run; other wind speeds pushed that
+            // past -33 m/s. The fix brief independently measured -19.5 m/s on its
+            // own sweep. Both confirm the excursion is large and this is a real
+            // defect, not a rounding artifact.
+            //
+            // The excursions are transient -- SpeedLag relaxation pulls Speed back
+            // toward zero and then toward a positive target once the kite's
+            // heading brings it back downwind of the edge -- so a final-state
+            // assertion would miss them. Sample every step.
+            (double freq, double amp)[] patterns =
+            {
+                (0.1, 0.4), (0.2, 0.8), (0.2, 1.0), (0.3, 0.6), (0.5, 1.0),
+                (0.7, 0.7), (1.0, 0.5), (1.5, 1.0), (2.0, 0.3), (0.7, 0.0),
+            };
+
+            foreach (var (freq, amp) in patterns)
+            {
+                var sim = MakeSim(6.0);
+                double beta = 20.0 * MathD.Deg2Rad;
+                double phi = 100.6 * MathD.Deg2Rad;
+                Vec3 direction = new Vec3(
+                    MathD.Cos(beta) * MathD.Sin(phi),
+                    MathD.Sin(beta),
+                    MathD.Cos(beta) * MathD.Cos(phi)).Normalized();
+                var state = new WindowKiteState
+                {
+                    Direction = direction,
+                    Heading = KiteStateView.TangentUp(direction),
+                    Speed = 25.0,
+                    Landed = false
+                };
+
+                int steps = (int)(35.0 / Dt);
+                for (int i = 0; i < steps; i++)
+                {
+                    double phase = MathD.Sin(i * Dt * freq) * amp;
+                    sim.Step(state, Dt, -phase, phase, 0.0);
+
+                    Assert.GreaterOrEqual(state.Speed, 0.0,
+                        $"Speed went negative at step {i} under pattern freq={freq}, amp={amp}");
+
+                    if (state.Landed)
+                        break;
+                }
+            }
+        }
+
+        [Test]
         public void EffectiveWind_ThePowerFloorDoesNotApplyUpwind()
         {
             var sim = MakeSim(6.0);
@@ -90,14 +149,27 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void KiteDrivenPastTheWindowEdge_DescendsRatherThanReachingTheUpwindHorizon()
+        public void KiteDrivenPastTheWindowEdge_ParksRatherThanReachingTheUpwindHorizon()
         {
-            // Measured consequence of the unconditional floor (before this fix): from
-            // this exact start, the kite drifts on past theta = 90 degrees, holds a
-            // constant floor-driven speed, and is still climbing through theta = 105.8
-            // degrees at t = 35 s -- headed for the upwind horizon at theta = 180,
-            // which the M3.3 half-disc renderer cannot draw. With the floor excluded
-            // upwind, the same start should lose its driving wind and come down.
+            // Measured consequence of the unconditional floor (before the fix that
+            // restricted it to the downwind hemisphere): from this exact start, the
+            // kite drifts on past theta = 90 degrees, holds a constant floor-driven
+            // speed, and is still climbing through theta = 105.8 degrees at t = 35 s
+            // -- headed for the upwind horizon at theta = 180, which the M3.3
+            // half-disc renderer cannot draw. Excluding the floor upwind stops that
+            // runaway.
+            //
+            // This test used to assert the kite lands. It doesn't anymore, and that
+            // is correct, not a regression: it used to reach the ground because a
+            // negative EffectiveWind pulled Speed negative, and negative Speed
+            // advanced the kite backwards along its heading, back down into the
+            // ground -- i.e. the very reverse-flight bug fixed by the Speed clamp
+            // in Step. With that bug fixed, the kite instead loses its driving wind,
+            // decelerates to zero, and parks in the air at theta = 99.4 degrees,
+            // motionless, exactly where KiteLeftAlone_DriftsToAndParksAtTheWindowEdge
+            // says a kite with no driving wind should be. Measured over 60 s (3000 steps):
+            // Speed reaches exactly 0.0 and theta stays pinned at 99.419 degrees
+            // for the rest of the run, never landing and never climbing further.
             var sim = MakeSim(6.0);
             Vec3 center = WindowChart.Center(sim.Wind);
 
@@ -123,7 +195,7 @@ namespace Kitesim.Core.Tests
             };
 
             double maxTheta = theta0;
-            int steps = (int)(15.0 / Dt);
+            int steps = (int)(60.0 / Dt);
             for (int i = 0; i < steps; i++)
             {
                 sim.Step(state, Dt, 0.0, 0.0, 0.0);
@@ -133,8 +205,10 @@ namespace Kitesim.Core.Tests
                     break;
             }
 
-            Assert.IsTrue(state.Landed,
-                "a kite that has lost its driving wind upwind of the pilot must come down, not hang there");
+            Assert.IsFalse(state.Landed,
+                "a kite that has lost its driving wind upwind of the pilot parks in the air, it does not touch down");
+            Assert.AreEqual(0.0, state.Speed, 1e-9,
+                "with no driving wind and no reverse flight, Speed settles to exactly zero");
             Assert.Less(maxTheta, 110.0,
                 "the kite must not keep climbing toward the upwind horizon at theta = 180");
         }

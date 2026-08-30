@@ -49,6 +49,14 @@ namespace Kitesim.Core
             double targetSpeed = Config.GlideRatio * effectiveWind;
             state.Speed += (targetSpeed - state.Speed) * MathD.Clamp01(dt / Config.SpeedLag);
 
+            // This model has no reverse flight. Upwind of the window edge,
+            // EffectiveWind goes negative (deliberately -- see EffectiveWind's
+            // comment), which pulls targetSpeed negative and would relax Speed
+            // below zero. A real kite that loses its driving wind slows to a stop
+            // and hangs there; it does not back up along its heading. Clamp so a
+            // negative Speed can never advance the kite backwards below.
+            state.Speed = MathD.Max(state.Speed, 0.0);
+
             // Rotate the heading inside the tangent plane.
             double turnRate = TurnRate(state, handLeft, handRight);
             double dPsi = turnRate * dt;
