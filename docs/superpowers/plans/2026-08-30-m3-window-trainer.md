@@ -1070,16 +1070,23 @@ The second term is **derived, not fitted**. Working it out in angles gives `g * 
 Append these tests inside the `WindowSimTests` class, before the closing brace:
 
 ```csharp
+        // Direction of turn is asserted on AccumulatedTurn, which is the unwrapped
+        // integral of the turn rate, and over a short window. HeadingRad comes from
+        // Atan2 and so folds at +/-180 degrees, and this kite turns far too fast for
+        // that to be safe: at full input in 6 m/s wind the rate is around 7.5 rad/s,
+        // which crosses the branch cut in under half a second. Asserting the
+        // unwrapped quantity keeps these tests valid if SteeringGain is ever retuned.
+
         [Test]
         public void PullingTheRightHand_TurnsTheKiteToThePilotsRight()
         {
             var sim = MakeSim(6.0);
             var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
 
-            Run(sim, state, 0.5, handLeft: 0.0, handRight: 0.7);
+            Run(sim, state, 0.1, handLeft: 0.0, handRight: 0.7);
 
-            // Heading rotates from "toward zenith" (0) toward "toward the pilot's
-            // right" (+90 degrees).
+            // Positive turn is from "toward zenith" toward "toward the pilot's right".
+            Assert.Greater(state.AccumulatedTurn, 0.2);
             Assert.Greater(sim.View(state).HeadingRad, 0.2);
         }
 
@@ -1089,8 +1096,9 @@ Append these tests inside the `WindowSimTests` class, before the closing brace:
             var sim = MakeSim(6.0);
             var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
 
-            Run(sim, state, 0.5, handLeft: 0.7, handRight: 0.0);
+            Run(sim, state, 0.1, handLeft: 0.7, handRight: 0.0);
 
+            Assert.Less(state.AccumulatedTurn, -0.2);
             Assert.Less(sim.View(state).HeadingRad, -0.2);
         }
 
