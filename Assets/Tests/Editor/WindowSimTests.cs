@@ -88,6 +88,60 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void GreatCircleAdvance_TransportsTheHeadingForwardNotBackward()
+        {
+            // Pins the sign in `nextHeading = t * cos - p * sin`.
+            //
+            // At ordinary flight sigma (speed * dt / LineLength, well under 45
+            // degrees per step at any realistic speed, dt and line length),
+            // Orthonormalize's projection exactly recovers the correctly
+            // transported tangent even if that sign is flipped: for any unit
+            // p perpendicular to t and any sigma, projecting
+            // (t*cos + p*sin) off (p*cos + t*sin) and renormalising reduces
+            // algebraically to sign(cos(2*sigma)) * (t*cos - p*sin), and
+            // cos(2*sigma) is positive for any sigma a kite racks up in one
+            // step at 20-50 Hz. So no trajectory sampled at ordinary step
+            // sizes, however long it runs, can tell the two signs apart --
+            // confirmed both by this derivation and by direct experiment (5 s
+            // and 20 s runs from the window centre heading at the zenith,
+            // bit-identical between the correct and flipped sign). The only
+            // place the bug is externally observable is where
+            // cos(2*sigma) goes negative, i.e. sigma past 45 degrees in a
+            // single step, which flips the corrected heading to point
+            // backward. This test forces that with a short line length so a
+            // single realistic-speed step crosses the threshold, then
+            // compares against the closed-form great-circle transport.
+            var config = new WindowConfiguration { LineLength = 0.5 };
+            var sim = new WindowSim(config)
+            {
+                Wind = new WindField { Speed = 6.0, Direction = Vec3.Forward }
+            };
+
+            // Start exactly at the target speed so the speed-relaxation step
+            // inside Step() leaves it unchanged, keeping sigma known and
+            // deterministic.
+            double speed = config.GlideRatio * sim.EffectiveWind(Vec3.Forward);
+            var state = new WindowKiteState
+            {
+                Direction = Vec3.Forward,
+                Heading = Vec3.Up,
+                Speed = speed,
+                Landed = false
+            };
+
+            double sigma = speed * Dt / config.LineLength;
+            Assert.Greater(sigma, MathD.PI / 4.0,
+                "the test needs sigma past the point where Orthonormalize stops masking the sign");
+
+            Vec3 expectedHeading = (Vec3.Up * MathD.Cos(sigma) - Vec3.Forward * MathD.Sin(sigma)).Normalized();
+
+            sim.Step(state, Dt, 0.0, 0.0, 0.0);
+
+            Assert.Greater(Vec3.Dot(state.Heading, expectedHeading), 0.9,
+                "the transported heading must point along the closed-form great-circle tangent, not backward");
+        }
+
+        [Test]
         public void DirectionAndHeadingStayUnitAndOrthogonal()
         {
             var sim = MakeSim(6.0);
