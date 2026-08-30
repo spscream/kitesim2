@@ -20,10 +20,11 @@ namespace Kitesim.Core
         public readonly Vec3 Heading;
         public readonly double Speed;
         public readonly double Tension;
+        public readonly int LineWraps;
         public readonly bool Landed;
 
         public TrackFrame(double time, int pilotIndex, Vec3 pilotPosition, Vec3 direction,
-            Vec3 heading, double speed, double tension, bool landed)
+            Vec3 heading, double speed, double tension, int lineWraps, bool landed)
         {
             Time = time;
             PilotIndex = pilotIndex;
@@ -32,6 +33,7 @@ namespace Kitesim.Core
             Heading = heading;
             Speed = speed;
             Tension = tension;
+            LineWraps = lineWraps;
             Landed = landed;
         }
     }
@@ -75,6 +77,7 @@ namespace Kitesim.Core
                 view.Heading,
                 view.Speed,
                 view.Tension,
+                view.LineWraps,
                 view.Landed));
         }
 
@@ -83,6 +86,13 @@ namespace Kitesim.Core
             frames.Clear();
         }
 
+        /// <summary>
+        /// Interpolated view of one pilot's kite at the given time. Direction and
+        /// Heading are lerped and re-orthonormalised, and Speed and Tension are
+        /// lerped; LineWraps and Landed are discrete quantities that do not lerp
+        /// sensibly, so both use nearest-neighbour: whichever recorded frame, previous
+        /// or next, is closer in time to the sample point.
+        /// </summary>
         public KiteStateView Sample(double time, int pilotIndex, double lineLength)
         {
             TrackFrame? previous = null;
@@ -131,7 +141,7 @@ namespace Kitesim.Core
                 lineLength,
                 MathD.Lerp(a.Speed, b.Speed, blend),
                 MathD.Lerp(a.Tension, b.Tension, blend),
-                0,
+                blend < 0.5 ? a.LineWraps : b.LineWraps,
                 blend < 0.5 ? a.Landed : b.Landed);
         }
 
@@ -144,7 +154,7 @@ namespace Kitesim.Core
                 lineLength,
                 frame.Speed,
                 frame.Tension,
-                0,
+                frame.LineWraps,
                 frame.Landed);
         }
 
