@@ -2434,8 +2434,16 @@ namespace Kitesim.Unity
         [SerializeField] private double windSpeed = 5.0;
         [SerializeField] private ChartProjection projection = ChartProjection.Equidistant;
 
-        /// <summary>Real spacing between pilots on the ground, metres.</summary>
-        [SerializeField] private float pilotSpacing = 4f;
+        /// <summary>
+        /// Team pilots stand in a staircase, not a line. Laterally they are very
+        /// close, half a metre to a metre, and almost never spread wide — a wide
+        /// spread is only used to stretch the window scene and is rare in practice.
+        /// The real separation is in depth: the lead pilot stands about half a
+        /// metre forward, the next half a metre behind them, and so on. The
+        /// staircase exists so a kite does not sit in the wake of the one ahead.
+        /// </summary>
+        [SerializeField] private float pilotLateralSpacing = 0.6f;
+        [SerializeField] private float pilotDepthStep = 0.5f;
 
         private static readonly Color[] PilotColors =
         {
@@ -2456,7 +2464,12 @@ namespace Kitesim.Unity
 
             for (int i = 0; i < pilotCount; i++)
             {
-                Vec3 start = new Vec3((i - (pilotCount - 1) * 0.5) * pilotSpacing, 0.0, 0.0);
+                // Staircase: lead pilot furthest downwind, each following pilot a
+                // step back. Downwind is +Z, so later pilots get a smaller Z.
+                Vec3 start = new Vec3(
+                    (i - (pilotCount - 1) * 0.5) * pilotLateralSpacing,
+                    0.0,
+                    -i * pilotDepthStep);
                 var kite = CreateKite(i, start, wind);
                 CreateIcon(i, kite, wind, iconRoot);
                 CreateInput(i, kite);
@@ -2740,7 +2753,12 @@ In `Assets/Scripts/Unity/WindowSceneBootstrap.cs`, inside `Awake`, replace the p
 
             for (int i = 0; i < pilotCount; i++)
             {
-                Vec3 start = new Vec3((i - (pilotCount - 1) * 0.5) * pilotSpacing, 0.0, 0.0);
+                // Staircase: lead pilot furthest downwind, each following pilot a
+                // step back. Downwind is +Z, so later pilots get a smaller Z.
+                Vec3 start = new Vec3(
+                    (i - (pilotCount - 1) * 0.5) * pilotLateralSpacing,
+                    0.0,
+                    -i * pilotDepthStep);
                 var kite = CreateKite(i, start, wind);
                 CreateIcon(i, kite, wind, iconRoot);
                 CreateInput(i, kite);
