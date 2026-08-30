@@ -10,6 +10,9 @@ namespace Kitesim.Core
         public static double Sin(double radians) => System.Math.Sin(radians);
         public static double Cos(double radians) => System.Math.Cos(radians);
         public static double Acos(double value) => System.Math.Acos(value);
+        public static double Asin(double value) => System.Math.Asin(value);
+        public static double Tan(double radians) => System.Math.Tan(radians);
+        public static double Atan(double value) => System.Math.Atan(value);
         public static double Abs(double value) => System.Math.Abs(value);
         public static double Sign(double value) => System.Math.Sign(value);
         public static double Atan2(double y, double x) => System.Math.Atan2(y, x);
