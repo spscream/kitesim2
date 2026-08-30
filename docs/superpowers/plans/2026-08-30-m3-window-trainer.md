@@ -1683,11 +1683,12 @@ namespace Kitesim.Core.Tests
             {
                 Wind = new WindField { Speed = 6.0, Direction = Vec3.Forward }
             };
-            // Start well above the horizon. Under this steering the kite spins on a
-            // circle of a couple of degrees, so from ground level it would land in
-            // about a third of a second and sit still for the rest of the run — the
-            // round trip would still match, but it would be matching a stationary
-            // point rather than a flight.
+            // Start well above the horizon and keep the run short. From ground level
+            // this steering lands the kite within about a third of a second, and the
+            // round trip would then be matching a stationary point rather than a
+            // flight. Even from 45 degrees the kite sags and lands at about 9.5 s —
+            // correct behaviour, since gravity drags an unattended kite down — so the
+            // run stops at 5 s, with roughly four and a half seconds of margin.
             double beta = 45.0 * MathD.Deg2Rad;
             Vec3 start = new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta));
             var state = new WindowKiteState
@@ -1698,9 +1699,10 @@ namespace Kitesim.Core.Tests
                 Landed = false
             };
 
+            Vec3 firstDirection = state.Direction;
             var track = new Track();
             double time = 0.0;
-            for (int i = 0; i < 500; i++)
+            for (int i = 0; i < 250; i++)
             {
                 double u = MathD.Sin(i * 0.02) * 0.7;
                 sim.Step(state, 0.02, -u, u, 0.0);
@@ -1709,6 +1711,10 @@ namespace Kitesim.Core.Tests
             }
 
             Assert.IsFalse(state.Landed, "the round trip must be recorded from a kite that actually flew");
+            Assert.Greater(
+                MathD.Acos(MathD.Clamp(Vec3.Dot(firstDirection, state.Direction), -1.0, 1.0)),
+                10.0 * MathD.Deg2Rad,
+                "the kite must have crossed the window, not hovered in place");
 
             var last = track.Sample(time, 0, 45.0);
             Assert.AreEqual(state.Direction.X, last.Direction.X, 1e-9);
