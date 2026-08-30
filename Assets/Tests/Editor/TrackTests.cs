@@ -109,6 +109,7 @@ namespace Kitesim.Core.Tests
                 var sample = track.Sample(t, 0, 45.0);
                 Assert.AreEqual(1.0, sample.Direction.Length(), 1e-9, $"t={t}");
                 Assert.AreEqual(1.0, sample.Heading.Length(), 1e-9, $"t={t}");
+                Assert.AreEqual(0.0, Vec3.Dot(sample.Direction, sample.Heading), 1e-9, $"t={t}");
             }
         }
 
