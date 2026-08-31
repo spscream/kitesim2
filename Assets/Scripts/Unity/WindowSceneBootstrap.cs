@@ -69,8 +69,11 @@ namespace Kitesim.Unity
             markerRoot.transform.SetParent(skyRoot.transform, false);
 
             // Global, like the view switcher: a routine belongs to the team, not to
-            // one pad, and it is recorded and replayed for everyone at once.
+            // one pad, and it is recorded and replayed for everyone at once. The same
+            // goes for the wrap count, which is a property of pairs of pilots.
             var recorder = gameObject.AddComponent<WindowTrackRecorder>();
+            var wraps = gameObject.AddComponent<WindowWrapHud>();
+            wraps.Build(wind, pilotCount);
 
             for (int i = 0; i < pilotCount; i++)
             {
@@ -86,6 +89,7 @@ namespace Kitesim.Unity
                 CreateInput(i, kite);
                 sky.Track(kite);
                 recorder.Register(kite);
+                wraps.Register(kite);
             }
 
             // The pilot's eyes go where the lead flier stands.
