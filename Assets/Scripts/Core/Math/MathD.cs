@@ -18,6 +18,7 @@ namespace Kitesim.Core
         public static double Atan2(double y, double x) => System.Math.Atan2(y, x);
         public static double Max(double a, double b) => System.Math.Max(a, b);
         public static double Min(double a, double b) => System.Math.Min(a, b);
+        public static double Round(double value) => System.Math.Round(value);
 
         public static double Clamp(double value, double min, double max)
         {

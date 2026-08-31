@@ -86,6 +86,7 @@ namespace Kitesim.Unity
             var recorder = gameObject.AddComponent<WindowTrackRecorder>();
             var wraps = gameObject.AddComponent<WindowWrapHud>();
             wraps.Build(wind, pilotCount);
+            var assist = gameObject.AddComponent<TurnAssistToggle>();
 
             for (int i = 0; i < pilotCount; i++)
             {
@@ -102,6 +103,7 @@ namespace Kitesim.Unity
                 sky.Track(kite);
                 recorder.Register(kite);
                 wraps.Register(kite);
+                assist.Register(kite);
             }
 
             // The pilot's eyes go where the lead flier stands.

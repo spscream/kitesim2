@@ -212,9 +212,33 @@ namespace Kitesim.Core
             // Unit tangent 90 degrees from the heading toward increasing psi.
             Vec3 turnNormal = Vec3.Cross(state.Heading, state.Direction);
             Vec3 weight = new Vec3(0.0, -Config.WeightTurnCoefficient, 0.0);
+            double weightTurn = Vec3.Dot(weight, turnNormal) / airspeed;
 
-            return Config.SteeringGain * airspeed * steering
-                   + Vec3.Dot(weight, turnNormal) / airspeed;
+            double rate = Config.SteeringGain * airspeed * steering + weightTurn;
+
+            // The steering help lives here, inside the model, rather than in the
+            // input layer: it changes how the kite flies, so a recorded track has to
+            // contain it and the suite has to be able to test it. It is gated by the
+            // turn already being flown, which is why the unhelped rate is computed
+            // first. See TurnAssist.
+            double added = TurnAssist.Added(HeadingRad(state), rate, Config);
+            if (added == 0.0)
+                return rate;
+
+            double helped = MathD.Clamp(steering + added, -1.0, 1.0);
+            return Config.SteeringGain * airspeed * helped + weightTurn;
+        }
+
+        /// <summary>
+        /// The kite's heading in the tangent plane: zero toward the zenith, ninety
+        /// degrees to the pilot's right. The same quantity KiteStateView reports, in
+        /// the same frame -- which is the frame the figures are flown and judged in.
+        /// </summary>
+        private static double HeadingRad(WindowKiteState state)
+        {
+            Vec3 up = KiteStateView.TangentUp(state.Direction);
+            Vec3 right = KiteStateView.TangentRight(state.Direction);
+            return MathD.Atan2(Vec3.Dot(state.Heading, right), Vec3.Dot(state.Heading, up));
         }
 
         /// <summary>

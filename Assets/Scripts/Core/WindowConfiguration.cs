@@ -163,6 +163,40 @@ namespace Kitesim.Core
         /// <summary>Half the travel of one hand, metres.</summary>
         public double HandTravel = 0.7;
 
+        /// <summary>
+        /// Steering help that makes up for the controller, not for the pilot. On by
+        /// the owner's decision: the flier's own hands hold 0.7% of full travel and a
+        /// thumb on a sprung stick holds about 5%, and that difference is worth about
+        /// five degrees at the exit of a turn -- which is the "92 or 87 instead of
+        /// 90" a pilot reports on a pad. See TurnAssist, where the numbers are
+        /// derived; the stated risk is that the line between making up for the device
+        /// and making up for the pilot cannot be checked from inside the simulator.
+        /// </summary>
+        public bool TurnAssist = true;
+
+        /// <summary>The grid of the figures: right angles, and the diagonals between them.</summary>
+        public double TurnAssistGridRad = 45.0 * MathD.Deg2Rad;
+
+        /// <summary>
+        /// How far from a node the help reaches. Wider than the five degrees it can
+        /// actually fix, so that it fades in rather than appearing, and narrow enough
+        /// that a pilot aiming somewhere else is left alone.
+        /// </summary>
+        public double TurnAssistCaptureRad = 10.0 * MathD.Deg2Rad;
+
+        /// <summary>
+        /// The most it may add, in the pilot's own units of full hand travel. This is
+        /// the gamepad's own error and nothing more: five degrees of heading at the
+        /// exit of a turn.
+        /// </summary>
+        public double TurnAssistMaxInput = 0.05;
+
+        /// <summary>
+        /// The turn rate at which the help is at full strength, rad/s. Below it the
+        /// help fades with the turn, so a kite flying straight gets none.
+        /// </summary>
+        public double TurnAssistTurnRate = 1.0;
+
         public double WalkSpeedBack = 1.7;     // m/s
         public double WalkSpeedForward = 1.2;  // m/s
 
