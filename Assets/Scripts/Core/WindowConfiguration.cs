@@ -161,12 +161,24 @@ namespace Kitesim.Core
         public double SpeedLagCeiling = 4.0;
 
         /// <summary>
-        /// Fraction of the wind speed that remains available at the zenith and at
-        /// the edge of the window. The cos(theta) law gives exactly zero there,
-        /// while a real kite still flies a little; without this floor every visit
-        /// to the zenith ends in a fall. See docs/kite-anatomy.md section 3.
+        /// Fraction of the wind speed still driving the wing at the zenith and at the
+        /// edge of the window, where cos(theta) gives exactly zero.
+        ///
+        /// Derived rather than picked, which it was not before. At the edge the wind
+        /// runs *along* the tangent plane rather than into the lines: cos(theta) is
+        /// the pull on the tether, not the air over the sail. A wing sitting in that
+        /// flow at its trim angle still works, and the part of the flow that drives
+        /// it goes as sin of that angle -- sin(8 degrees) = 0.139, near three times
+        /// the 0.05 that was here by guess.
+        ///
+        /// What the old number cost, in the owner's word, was a kite that felt stuck
+        /// in syrup at the edge: at 6 m/s it sat at 1.3 m/s, and since steering is
+        /// linear in speed it had almost no authority to fly back out. At 0.139 the
+        /// same kite holds 3.7 m/s and answers the hands.
+        ///
+        /// See docs/kite-anatomy.md section 3.
         /// </summary>
-        public double PowerFloor = 0.05;
+        public double PowerFloor => MathD.Sin(TrimAngleOfAttack);
 
         /// <summary>
         /// Airspeed floor for the gravity turn term, m/s. Below this the "kite

@@ -216,7 +216,10 @@ namespace Kitesim.Core.Tests
                 Run(sim, state, 3.0);
 
                 if (gravity)
-                    Assert.Greater(state.Speed, edgeSpeed * 3.0,
+                    // A real gain of speed, not a multiple of whatever the edge
+                    // sustains: gravity adds the same metres per second either way,
+                    // so a ratio just measures how slow the edge is.
+                    Assert.Greater(state.Speed, edgeSpeed + 6.0,
                         "diving off the edge must trade height for speed, not hold the edge speed");
                 else
                     Assert.AreEqual(edgeSpeed, state.Speed, 0.05,
@@ -323,7 +326,8 @@ namespace Kitesim.Core.Tests
 
             double expected = sim.Config.GlideRatio * sim.Config.PowerFloor * 5.0;
             Assert.AreEqual(expected, state.Speed, 0.2);
-            Assert.Less(state.Speed, 3.0);
+            Assert.Less(state.Speed, 0.25 * sim.Config.GlideRatio * 5.0,
+                "the edge is a fraction of what the middle of the window sustains");
         }
 
         [Test]
@@ -653,45 +657,19 @@ namespace Kitesim.Core.Tests
             // by driving the hand inputs through Step, not by hand-placing
             // Heading, so this exercises the actual control path.
             //
-            // The parked starting state is constructed at phi = 90 degrees exactly
-            // (on the meridian that forms the theta = 90 edge for any elevation --
-            // see EffectiveWind), heading toward the zenith (psi = 0), which keeps
-            // EffectiveWind pinned at exactly the power floor. Measured: left alone
-            // there, Speed relaxes from 0 and settles at 1.8118 m/s within about
-            // 5 s and theta stays exactly 90.000 degrees (this is the "effective
-            // wind is at the floor, speed settles around 1.8 m/s" state referenced
-            // in the fix brief) -- a genuinely flyable parked state, unlike the
-            // upwind-of-the-edge parked state in
-            // KiteLeftAlone_DriftsToAndParksAtTheWindowEdge, where Speed sits at
-            // exactly zero and the kite cannot move at all.
+            // Turn the nose down, then let go -- which is the technique. Holding the
+            // pull all the way down used to land the kite, but only because the edge
+            // speed was 1.8 m/s: steering is linear in speed, so at the derived power
+            // floor's 3.7 m/s the same held input sweeps the nose past the ground and
+            // the kite loops at the edge instead of descending. Measured over 60 s of
+            // held 0.2: elevation cycles between 34 and 80 degrees and the heading
+            // goes round and round. A real kite does the same thing -- a constant
+            // differential is how you make it spin -- so the fix is to fly the
+            // technique properly rather than to soften the model back.
             //
-            // From there, holding handLeft = 0.2 (a moderate, sustained pull) turns
-            // the nose from psi = 0 to psi around 177 degrees (pointing at the
-            // ground, not exactly 180 because the constant steering input is
-            // balanced against the gravity term) within about 2 s, and holding it
-            // there measurably lands the kite: elevation descends from 40.7 degrees
-            // to 0 over 19.80 s, at a Speed that stays close to the measured
-            // 1.8118 m/s the entire way down.
-            //
-            // Working steering band, re-measured after the hemisphere clamp was
-            // added to Step: an earlier measurement of this same scenario (on the
-            // code before that clamp existed) found handLeft = 0.10-0.30 worked,
-            // 0.05 and 0.32 were the true edges of that, and 0.35 failed to land
-            // within 60 s. That failure mode no longer exists -- swept handLeft
-            // from 0.01 to 1.0 (0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20,
-            // 0.25, 0.30, 0.32, 0.33, 0.35, 0.40, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0) and
-            // every single value lands within 60 s (19.1-21.5 s, tightening
-            // monotonically as handLeft grows). Confirmed this is the clamp's
-            // doing, not a coincidence: re-running the same sweep with the clamp
-            // disabled reproduces the old result exactly (0.01-0.32 land, 0.33
-            // lands slower at 20.26 s, 0.35 and everything above it never lands
-            // within 60 s). What changed: without the clamp, a strong enough pull
-            // could transiently push the descending kite's Direction upwind of the
-            // edge, where it hit the old freeze (Speed pinned at 0, sigma pinned at
-            // 0) and never reached the ground. The clamp added for the hemisphere
-            // fix (see WindowSim.Step) recovers that excursion instead of freezing
-            // it, so the descent completes regardless of how hard the pilot pulls.
-            // handLeft = 0.2 is comfortably inside either version of the band.
+            // Measured with turn-then-release: the nose reaches within 25 degrees of
+            // straight down after 5.5 s of pull, and from there the kite dives out,
+            // gaining speed all the way to 24 m/s, and is on the ground at 8.2 s.
             var sim = MakeSim(6.0);
             double beta = 30.0 * MathD.Deg2Rad;
             double phi = 90.0 * MathD.Deg2Rad;
@@ -717,7 +695,11 @@ namespace Kitesim.Core.Tests
             int steps = (int)(30.0 / Dt);
             for (int i = 0; i < steps; i++)
             {
-                sim.Step(state, Dt, handLeft: 0.2, handRight: 0.0, walkAxis: 0.0);
+                // Pull until the nose is down, then let go and let it fly out.
+                double psi = MathD.Abs(sim.View(state).HeadingRad * MathD.Rad2Deg);
+                double hand = MathD.Abs(psi - 180.0) < 25.0 ? 0.0 : 0.2;
+
+                sim.Step(state, Dt, hand, 0.0, 0.0);
                 if (state.Landed)
                     break;
             }
