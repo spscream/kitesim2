@@ -37,10 +37,11 @@ namespace Kitesim.Unity
         /// instrument, and the flat chart always drew the kite as a fixed-size
         /// triangle rather than at its true 3.2 degrees -- so this restores what the
         /// chart already did rather than introducing a new distortion. At true size
-        /// the kite is about 22 px on a full-width chart; at 3x it is readable.
-        /// Only the chart sees it; the judge and pilot views get the real size.
+        /// the kite is about 22 px on a full-width chart, which is too small to read;
+        /// 3x was tried first and the owner found it too big. Only the chart sees
+        /// this; the judge and pilot views get the real size.
         /// </summary>
-        [SerializeField] private float chartExaggeration = 3f;
+        [SerializeField] private float chartExaggeration = 2f;
 
         [SerializeField] private float trailSeconds = 2.5f;
         [SerializeField] private float trailWidth = 0.6f;
