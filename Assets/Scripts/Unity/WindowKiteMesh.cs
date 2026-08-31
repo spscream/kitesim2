@@ -220,8 +220,16 @@ namespace Kitesim.Unity
             line.endWidth = lineWidthAtKite;
             line.numCapVertices = 0;
             line.material = new Material(Shader.Find("Sprites/Default"));
-            line.startColor = new Color(0.9f, 0.9f, 0.9f, 0.55f);
-            line.endColor = new Color(0.9f, 0.9f, 0.9f, 0.30f);
+
+            // Dark, not white. A line against a bright sky is seen against the light,
+            // so it reads as a dark hair however pale the line itself is -- the same
+            // reason the kites in the owner's footage are silhouettes on a washed-out
+            // sky, and the same reason white lines on this sky were invisible. Tinted
+            // toward the pilot's colour so that in team play it is possible to tell
+            // whose lines cross whose.
+            var ink = new Color(baseColor.r * 0.30f, baseColor.g * 0.30f, baseColor.b * 0.30f, 0.85f);
+            line.startColor = ink;
+            line.endColor = new Color(ink.r, ink.g, ink.b, 0.65f);
             return line;
         }
 
