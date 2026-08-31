@@ -152,7 +152,6 @@ MonoBehaviour:
     type: 3}
   kiteModel: {fileID: 919132149155446097, guid: bf9fbe863ca39a74189097c03d6c83a1,
     type: 3}
-  startInSkyView: 1
   pilotCount: 1
   windSpeed: 5
   projection: 0

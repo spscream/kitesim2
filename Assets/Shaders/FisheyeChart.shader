@@ -4,7 +4,7 @@
 // equidistant projection is r = theta, which is exactly the equidistant fisheye
 // mapping; its stereographic projection is r = 2*tan(theta/2), which is exactly
 // the stereographic fisheye mapping. So a fisheye lens at the pilot's hands
-// looking downwind reproduces the flat chart from the 3D world, with the real
+// looking downwind reproduces the classical flat chart from the 3D world, with real
 // kite models in it, and the iso-power arcs land on the chart's concentric
 // circles because they are the same geometry seen through the same lens.
 //
@@ -76,7 +76,7 @@ Shader "Kitesim/FisheyeChart"
                 // the upper half -- a kite at azimuth 90 and elevation 45, for
                 // instance, sits on the rim at 45 degrees up and to the right. The
                 // lower half was the ground, and drawing it cost three quarters of
-                // the picture. This is also exactly the shape the flat chart draws:
+                // the picture. This is also exactly the shape of the classical chart:
                 // flat bottom for the ground, arc for the window edge.
                 //
                 // r = 1 is the window edge and the zenith is at (0, 1), but the frame

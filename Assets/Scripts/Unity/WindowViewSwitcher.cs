@@ -6,18 +6,15 @@ namespace Kitesim.Unity
 {
     /// <summary>
     /// Cycles the main view: the judge behind the pilots, the pilot's own eyes, and
-    /// the flat chart.
+    /// the window chart.
     ///
     /// Read globally rather than through PlayerInput on purpose: PlayerInput binds
     /// to one gamepad, and the view is a property of the person watching, not of a
     /// pilot. In team play one person switches it, not each pad independently.
     ///
-    /// Exactly one camera is enabled at a time, which is what makes the switch
-    /// trivially correct -- there is no z-order or render-target arbitration to get
-    /// wrong. The 3D world stays alive whichever of its cameras is chosen, because
-    /// the fisheye chart renders from it continuously; only the flat chart, which is
-    /// a separate set of objects sitting near the origin, is switched off so its
-    /// geometry cannot appear inside the 3D view.
+    /// Every view is a camera on the one 3D world, so switching is nothing but
+    /// enabling one camera and disabling the rest -- there is no z-order or
+    /// render-target arbitration to get wrong, and no scenery to switch on and off.
     /// </summary>
     public class WindowViewSwitcher : MonoBehaviour
     {
@@ -29,7 +26,6 @@ namespace Kitesim.Unity
         private struct View
         {
             public string Name;
-            public GameObject Root;
             public Camera Camera;
 
             /// <summary>
@@ -41,9 +37,9 @@ namespace Kitesim.Unity
         }
 
         /// <summary>Register a view. The first one registered is the one shown.</summary>
-        public void Add(string name, GameObject root, Camera camera, System.Action<bool> onShown = null)
+        public void Add(string name, Camera camera, System.Action<bool> onShown = null)
         {
-            views.Add(new View { Name = name, Root = root, Camera = camera, OnShown = onShown });
+            views.Add(new View { Name = name, Camera = camera, OnShown = onShown });
         }
 
         public void Show(int index)
@@ -53,29 +49,12 @@ namespace Kitesim.Unity
 
             current = ((index % views.Count) + views.Count) % views.Count;
 
-            // Roots first, then cameras: a camera enabled inside a root that is about
-            // to be deactivated would render one frame of the wrong world.
-            for (int i = 0; i < views.Count; i++)
-            {
-                if (views[i].Root != null)
-                    views[i].Root.SetActive(RootNeeded(i));
-            }
             for (int i = 0; i < views.Count; i++)
             {
                 if (views[i].Camera != null)
                     views[i].Camera.enabled = i == current;
                 views[i].OnShown?.Invoke(i == current);
             }
-        }
-
-        /// <summary>
-        /// A root stays alive if any view sharing it is selected. The judge and the
-        /// pilot are two cameras on the same world, so choosing one must not switch
-        /// the other's scenery off.
-        /// </summary>
-        private bool RootNeeded(int index)
-        {
-            return views[index].Root == views[current].Root;
         }
 
         void Update()

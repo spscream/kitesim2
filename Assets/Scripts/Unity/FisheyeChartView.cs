@@ -7,7 +7,7 @@ namespace Kitesim.Unity
     /// <summary>
     /// The wind-window chart, rendered from the 3D world instead of drawn separately.
     ///
-    /// The flat chart and a fisheye lens are the same thing: WindowChart's
+    /// The classical flat chart and a fisheye lens are the same thing: WindowChart's
     /// equidistant projection is r = theta, the equidistant fisheye mapping, and its
     /// stereographic projection is r = 2*tan(theta/2), the stereographic fisheye
     /// mapping. So a cubemap rendered at the pilot's hands, unwrapped by that

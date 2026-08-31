@@ -16,9 +16,8 @@ namespace Kitesim.Unity
     public class SkyView : MonoBehaviour
     {
         /// <summary>
-        /// Matches WindowChartRenderer's ring count so the two views agree about
-        /// where the power is. Contour i sits at power i/ringCount, the same law the
-        /// flat chart draws.
+        /// Contour i sits at power i/ringCount -- the ideal cos(theta) law, the same
+        /// one WindowChart states, drawn here as arcs across the sky.
         /// </summary>
         [SerializeField] private int ringCount = 5;
         [SerializeField] private int segmentsPerArc = 96;

@@ -7,9 +7,9 @@ namespace Kitesim.Unity
     /// One kite in the judge's view: the Fury mesh at its true size, flying at the
     /// end of two lines, trailing its recent path and tinted by line tension.
     ///
-    /// The 3D counterpart of WindowKiteIcon, reading the same KiteStateView. Where
-    /// the icon draws a triangle on the flat chart, this places the real mesh in the
-    /// world -- which is the point of the view: the kite's orientation is visible.
+    /// Reads a KiteStateView and places the real mesh in the world, which is the
+    /// point of the view: the kite's orientation is visible, where the flat chart
+    /// this replaced could only draw a triangle.
     ///
     /// See docs/superpowers/specs/2026-08-31-judge-view-design.md.
     /// </summary>
@@ -34,9 +34,9 @@ namespace Kitesim.Unity
 
         /// <summary>
         /// How much larger than life the kite is drawn on the chart. The chart is an
-        /// instrument, and the flat chart always drew the kite as a fixed-size
-        /// triangle rather than at its true 3.2 degrees -- so this restores what the
-        /// chart already did rather than introducing a new distortion. At true size
+        /// instrument, and the flat chart this replaced always drew the kite as a
+        /// fixed-size triangle rather than at its true 3.2 degrees -- so this keeps
+        /// what the chart already did rather than introducing a distortion. At true size
         /// the kite is about 22 px on a full-width chart, which is too small to read;
         /// 3x was tried first and the owner found it too big. Only the chart sees
         /// this; the judge and pilot views get the real size.

@@ -4,8 +4,8 @@ namespace Kitesim.Unity
     /// Layers that let one world be drawn differently by different cameras.
     ///
     /// The chart is an instrument, and instruments draw their symbols larger than
-    /// scale -- the flat chart always drew the kite as a fixed-size triangle, never
-    /// at its true 3 degrees. To keep that while still rendering the real world, each
+    /// scale -- the kite is 3 degrees across, too small to read on a chart. To draw
+    /// it larger there while still rendering the one real world, each
     /// kite carries two models: one at true size for the judge and pilot, one
     /// exaggerated for the chart. Each camera sees exactly one of them.
     ///

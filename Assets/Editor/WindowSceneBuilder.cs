@@ -6,8 +6,8 @@ using UnityEngine.InputSystem;
 namespace Kitesim.Unity.EditorTools
 {
     /// <summary>
-    /// Builds the 2D wind-window scene. The scene holds one object: the bootstrap
-    /// builds the camera, the chart and the pilots at runtime, so there is nothing
+    /// Builds the wind-window scene. The scene holds one object: the bootstrap
+    /// builds the world, the cameras and the pilots at runtime, so there is nothing
     /// else to serialise and nothing to drift out of sync with the code.
     /// </summary>
     public static class WindowSceneBuilder

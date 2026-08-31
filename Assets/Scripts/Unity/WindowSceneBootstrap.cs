@@ -5,19 +5,15 @@ using Kitesim.Core;
 namespace Kitesim.Unity
 {
     /// <summary>
-    /// Assembles the wind-window trainer and its two views.
+    /// Assembles the wind-window trainer and its views.
     ///
     /// The simulation is built once: one kite plus one PlayerInput per pilot,
-    /// with PlayerInputManager pairing a gamepad to each pilot as it joins. On top
-    /// of that sit two independent presentations of the same KiteStateView, each
-    /// under its own root with its own camera:
+    /// with PlayerInputManager pairing a gamepad to each pilot as it joins. There
+    /// is a single 3D world on top of it (SkyView, WindowKiteMesh), and every view
+    /// is a camera on that world: the judge, the pilot's own eyes, and the window
+    /// chart, which is that same world seen through a fisheye at the pilot's hands.
     ///
-    ///   ChartView -- the flat wind-window chart, an orthographic camera on the
-    ///                chart plane (WindowChartRenderer, WindowKiteIcon)
-    ///   SkyView   -- the judge's view, a camera behind the pilot line looking
-    ///                downwind (SkyView, WindowKiteMesh)
-    ///
-    /// WindowViewSwitcher enables exactly one of them. This component only
+    /// WindowViewSwitcher enables exactly one camera at a time. This component only
     /// orchestrates; each view knows how to build itself. See
     /// docs/superpowers/specs/2026-08-31-judge-view-design.md.
     /// </summary>
@@ -27,9 +23,6 @@ namespace Kitesim.Unity
 
         /// <summary>The Fury model, used by the judge's view. See WindowKiteMesh.</summary>
         [SerializeField] private GameObject kiteModel;
-
-        /// <summary>Which view the scene opens in.</summary>
-        [SerializeField] private bool startInSkyView = true;
 
         /// <summary>
         /// Default to one pilot. With several PlayerInput components active and only
@@ -65,13 +58,7 @@ namespace Kitesim.Unity
         {
             var wind = new WindField { Speed = windSpeed, Direction = Vec3.Forward };
 
-            var chartRoot = new GameObject("ChartView");
             var skyRoot = new GameObject("SkyView");
-
-            Camera chartCamera = CreateChartCamera(chartRoot.transform, projection);
-            CreateChart(chartRoot.transform, wind, projection);
-            var iconRoot = new GameObject("Icons");
-            iconRoot.transform.SetParent(chartRoot.transform, false);
 
             double lineLength = new WindowConfiguration().LineLength;
             var sky = skyRoot.AddComponent<SkyView>();
@@ -88,7 +75,6 @@ namespace Kitesim.Unity
                     0.0,
                     -i * pilotDepthStep);
                 var kite = CreateKite(i, start, wind);
-                CreateIcon(i, kite, wind, iconRoot.transform);
                 CreateMesh(i, kite, meshRoot.transform);
                 CreateInput(i, kite);
                 sky.Track(kite);
@@ -106,36 +92,14 @@ namespace Kitesim.Unity
             // Built last: showing a view enables one camera and disables the rest,
             // so every view must exist before that happens.
             var switcher = gameObject.AddComponent<WindowViewSwitcher>();
-            switcher.Add("Judge", skyRoot, sky.Camera);
-            switcher.Add("Pilot", skyRoot, sky.PilotCamera);
-            switcher.Add("Fisheye chart", skyRoot, fisheye.BackdropCamera,
+            switcher.Add("Judge", sky.Camera);
+            switcher.Add("Pilot", sky.PilotCamera);
+            switcher.Add("Window chart", fisheye.BackdropCamera,
                 shown => fisheye.SetFullscreen(shown));
-            switcher.Add("Flat chart", chartRoot, chartCamera);
-            switcher.Show(startInSkyView ? 0 : 3);
+            switcher.Show(0);
 
             var cornerToggle = gameObject.AddComponent<CornerChartToggle>();
             cornerToggle.Bind(fisheye);
-        }
-
-        private Camera CreateChartCamera(Transform parent, ChartProjection chartProjection)
-        {
-            var go = new GameObject("ChartCamera");
-            go.transform.SetParent(parent, false);
-            var cam = go.AddComponent<Camera>();
-            cam.orthographic = true;
-            cam.orthographicSize = (float)WindowChart.EdgeRadius(chartProjection) * 1.12f;
-            cam.transform.position = new Vector3(0f, (float)WindowChart.EdgeRadius(chartProjection) * 0.5f, -10f);
-            cam.backgroundColor = new Color(0.07f, 0.09f, 0.12f);
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            return cam;
-        }
-
-        private void CreateChart(Transform parent, WindField wind, ChartProjection chartProjection)
-        {
-            var go = new GameObject("WindowChart");
-            go.transform.SetParent(parent, false);
-            var renderer = go.AddComponent<WindowChartRenderer>();
-            renderer.Configure(wind, chartProjection);
         }
 
         private void CreateMesh(int index, WindowKiteBehaviour kite, Transform parent)
@@ -153,14 +117,6 @@ namespace Kitesim.Unity
             var kite = go.AddComponent<WindowKiteBehaviour>();
             kite.Configure(index, start, wind);
             return kite;
-        }
-
-        private void CreateIcon(int index, WindowKiteBehaviour kite, WindField wind, Transform parent)
-        {
-            var go = new GameObject($"Icon_{index}");
-            go.transform.SetParent(parent, false);
-            var icon = go.AddComponent<WindowKiteIcon>();
-            icon.Bind(kite, wind, projection, PilotColors[index % PilotColors.Length]);
         }
 
         private void CreateInput(int index, WindowKiteBehaviour kite)
