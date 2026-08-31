@@ -196,15 +196,18 @@ namespace Kitesim.Unity
             if (modelRenderer == null)
                 return;
 
-            // Same reading as the flat chart's icon: pale when the kite is loafing at
-            // the edge, saturated in the power zone. The icon fades its alpha; an
-            // opaque lit material cannot, so it washes toward white instead.
-            // Darkening was the first attempt and it was wrong: a dark sail lit from
-            // behind renders nearly black, and at judge distance the kite is a few
-            // pixels that then vanish against the ground.
+            // Tension reads as saturation, and the kite stays dark either way.
+            //
+            // Two earlier attempts were wrong for the same reason: they moved the
+            // kite's brightness rather than its colour. Darkening it left it black
+            // and lost; washing it toward white lost it against the sky. The owner's
+            // competition footage settles it -- real kites are dark silhouettes on a
+            // pale, hazy sky, and that contrast is the whole reason they are findable
+            // at three degrees across. So an unloaded kite desaturates toward dark
+            // slate instead of fading, and stays visible.
             float load = Mathf.Clamp01((float)(view.Tension / 120.0));
             modelRenderer.material.color = Color.Lerp(
-                Color.Lerp(baseColor, Color.white, 0.55f), baseColor, load);
+                Color.Lerp(baseColor, new Color(0.20f, 0.20f, 0.24f), 0.6f), baseColor, load);
         }
     }
 }

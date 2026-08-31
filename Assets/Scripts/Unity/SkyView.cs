@@ -54,9 +54,24 @@ namespace Kitesim.Unity
         /// </summary>
         [SerializeField] private float fieldOfView = 70f;
 
-        private static readonly Color SkyColor = new Color(0.42f, 0.58f, 0.75f);
+        /// <summary>
+        /// Pale and hazy, not postcard blue. Taken from the owner's competition
+        /// footage, where the sky is almost white and the kites read as dark
+        /// silhouettes against it. Contrast is what makes a kite findable at three
+        /// degrees across; a saturated blue sky loses it.
+        /// </summary>
+        private static readonly Color SkyColor = new Color(0.80f, 0.84f, 0.87f);
 
         public Camera Camera { get; private set; }
+
+        private JudgeCameraRig rig;
+
+        /// <summary>Kites the judge should keep in frame. Call after Build.</summary>
+        public void Track(WindowKiteBehaviour kite)
+        {
+            if (rig != null)
+                rig.Track(kite);
+        }
 
         public void Build(WindField wind, double lineLength)
         {
@@ -77,7 +92,8 @@ namespace Kitesim.Unity
 
             var light = go.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.1f;
+            // Hazy day, not hard sun: the reference footage is flat and overcast.
+            light.intensity = 0.85f;
             light.color = new Color(1f, 0.97f, 0.9f);
             // Behind and above the judge, so the sail is lit rather than silhouetted.
             go.transform.rotation = Quaternion.Euler(48f, 20f, 0f);
@@ -96,7 +112,8 @@ namespace Kitesim.Unity
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
             ground.GetComponent<Renderer>().material = new Material(shader)
             {
-                color = new Color(0.33f, 0.42f, 0.24f)
+                // Pale sand, as in the reference footage, rather than lawn green.
+                color = new Color(0.46f, 0.44f, 0.39f)
             };
 
             // The primitive ships with a collider; nothing in this scene uses physics.
@@ -179,12 +196,15 @@ namespace Kitesim.Unity
             Camera.farClipPlane = Mathf.Max(1000f, groundSize * 2f);
 
             Vector3 forward = downwind.ToVector3();
+            Vector3 rest = -forward * cameraBackMetres + Vector3.up * cameraEyeHeight;
 
-            // Stand behind the pilots, looking downwind and up into the window.
-            go.transform.position = -forward * cameraBackMetres + Vector3.up * cameraEyeHeight;
-            go.transform.rotation = Quaternion.LookRotation(
-                Quaternion.AngleAxis(-cameraAimElevation, Vector3.Cross(Vector3.up, forward)) * forward,
-                Vector3.up);
+            // Resting aim: tilted up into the window. The rig takes over from here,
+            // following the kites with the head and stepping back only if it must.
+            Vector3 restAim = Quaternion.AngleAxis(
+                -cameraAimElevation, Vector3.Cross(Vector3.up, forward)) * forward;
+
+            rig = go.AddComponent<JudgeCameraRig>();
+            rig.Configure(rest, restAim);
         }
 
         private LineRenderer CreateLine(string label, Color color, float width)

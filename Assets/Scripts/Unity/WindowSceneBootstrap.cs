@@ -91,6 +91,7 @@ namespace Kitesim.Unity
                 CreateIcon(i, kite, wind, iconRoot.transform);
                 CreateMesh(i, kite, meshRoot.transform);
                 CreateInput(i, kite);
+                sky.Track(kite);
             }
 
             // Built last: Bind enables one root and disables the other, and the
