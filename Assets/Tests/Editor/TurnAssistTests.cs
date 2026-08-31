@@ -101,6 +101,28 @@ namespace Kitesim.Core.Tests
         }
 
         /// <summary>
+        /// The second thing a flight found: hands do not arrive or leave together.
+        /// A two-handed corner begins as one hand, becomes two, and ends as one
+        /// again, so the last reading of the gesture is a diagonal -- and a turn with
+        /// both sticks to 0.83 came out as a 45. The strongest claim wins, and a
+        /// right angle outranks a diagonal.
+        /// </summary>
+        [Test]
+        public void ADiagonalAtTheEndOfACornerDoesNotDemoteIt()
+        {
+            WindowKiteState state = JustReleased(gridDeg: 0.0);
+
+            TurnAssist.Steering(state, 0.7, 0.7, -0.1, 1.0, Deg(20), On());
+            Assert.AreEqual(Deg(45), state.AssistGrid, 1e-12, "one hand first");
+
+            TurnAssist.Steering(state, 1.0, 1.0, -1.0, 1.0, Deg(50), On());
+            Assert.AreEqual(Deg(90), state.AssistGrid, 1e-12, "then both: a corner");
+
+            TurnAssist.Steering(state, 0.7, 0.7, -0.1, 1.0, Deg(80), On());
+            Assert.AreEqual(Deg(90), state.AssistGrid, 1e-12, "one hand leaves first, still a corner");
+        }
+
+        /// <summary>
         /// It does not carry over either: a corner flown a while ago must not decide
         /// the next figure. When the kite stops turning the gesture is forgotten.
         /// </summary>

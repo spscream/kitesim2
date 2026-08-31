@@ -18,6 +18,10 @@ namespace Kitesim.Unity
     /// that came out at 110 degrees cannot be told apart into "the pilot held on too
     /// long", "the help never saw a release" and "the help did the wrong thing".
     ///
+    /// Both pairs are written: where the hands have got to, and where the sticks
+    /// are. They differ by the rate limit on a hand, and every defect found in the
+    /// steering help so far has lived in that gap.
+    ///
     /// A diagnostic, not a feature: it is here to answer questions about the
     /// controls, and it can go when they are answered.
     /// </summary>
@@ -30,8 +34,8 @@ namespace Kitesim.Unity
         /// works from, and it is enough to read the manoeuvre.
         /// </summary>
         public const string Header =
-            "time,pilot,handLeft,handRight,steering,headingDeg,recentTurnDeg," +
-            "assistGridDeg,assistTargetDeg,speed,landed";
+            "time,pilot,handLeft,handRight,stickLeft,stickRight,steering,headingDeg," +
+            "recentTurnDeg,assistGridDeg,assistTargetDeg,speed,landed";
 
         [SerializeField] private string fileName = "inputs.csv";
 
@@ -99,6 +103,8 @@ namespace Kitesim.Unity
                 rows.Append(kite.PilotIndex.ToString(culture)).Append(',');
                 rows.Append(kite.HandLeft.ToString("F4", culture)).Append(',');
                 rows.Append(kite.HandRight.ToString("F4", culture)).Append(',');
+                rows.Append(kite.IntentLeft.ToString("F4", culture)).Append(',');
+                rows.Append(kite.IntentRight.ToString("F4", culture)).Append(',');
                 rows.Append(steering.ToString("F4", culture)).Append(',');
                 rows.Append(heading.ToString("F2", culture)).Append(',');
                 rows.Append((kite.RecentTurnRate * MathD.Rad2Deg).ToString("F2", culture)).Append(',');

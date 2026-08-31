@@ -263,9 +263,15 @@ namespace Kitesim.Core
             double intentSteering = MathD.Clamp(
                 (intentRight - intentLeft) / (2.0 * Config.HandTravel), -1.0, 1.0);
 
+            // The gesture is read off the sticks too, not off the hands. A hand is
+            // rate-limited to human speed and needs 0.17 s to reach the two-thirds of
+            // travel that counts as working, which a fast corner does not allow: in a
+            // recorded flight the second hand peaked at 0.59 against a threshold of
+            // 0.6 and the corner was read as a diagonal, while the stick had been
+            // hard over the whole time.
             steering = TurnAssist.Steering(
                 state, steering, intentSteering,
-                handLeft / Config.HandTravel, handRight / Config.HandTravel,
+                intentLeft / Config.HandTravel, intentRight / Config.HandTravel,
                 HeadingRad(state), Config);
 
             return Config.SteeringGain * airspeed * steering + weightTurn;

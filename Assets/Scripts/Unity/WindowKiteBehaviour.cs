@@ -38,6 +38,8 @@ namespace Kitesim.Unity
         /// </summary>
         public float HandLeft => handLeft;
         public float HandRight => handRight;
+        public float IntentLeft => intentLeft;
+        public float IntentRight => intentRight;
         public double RecentTurnRate => state != null ? state.RecentTurnRate : 0.0;
         public double AssistGrid => state != null ? state.AssistGrid : 0.0;
         public double AssistTarget => state != null ? state.AssistTarget : double.NaN;

@@ -71,8 +71,15 @@ namespace Kitesim.Core
             {
                 state.AssistTarget = double.NaN;
 
+                // The strongest claim of the whole gesture wins, and a right angle is
+                // a stronger claim than a diagonal. Hands do not arrive or leave
+                // together: one leads going in and one leaves first coming out, so a
+                // two-handed corner begins and ends looking like a one-handed
+                // diagonal. Keeping the last non-zero reading turned corners into
+                // diagonals -- seen in a flight, a turn with both sticks to 0.83 came
+                // out as a 45.
                 double grid = GridFromGesture(handLeft, handRight, config);
-                if (grid > 0.0)
+                if (grid > state.AssistGrid)
                     state.AssistGrid = grid;
 
                 return pilotSteering;
