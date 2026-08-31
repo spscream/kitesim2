@@ -58,6 +58,16 @@ namespace Kitesim.Unity
             transform.rotation = Quaternion.LookRotation(forward, Vector3.up);
         }
 
+        /// <summary>
+        /// Pin this head in place: it may look around, but never walks backwards.
+        /// A pilot is holding the kite, so retreating to frame it is not something
+        /// they can do -- only a judge, who is just watching, has that option.
+        /// </summary>
+        public void NeverStepsBack()
+        {
+            maxBackOff = 0f;
+        }
+
         public void Track(WindowKiteBehaviour kite)
         {
             if (kite != null)

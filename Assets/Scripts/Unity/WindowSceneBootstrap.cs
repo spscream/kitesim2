@@ -68,7 +68,7 @@ namespace Kitesim.Unity
             var chartRoot = new GameObject("ChartView");
             var skyRoot = new GameObject("SkyView");
 
-            CreateChartCamera(chartRoot.transform, projection);
+            Camera chartCamera = CreateChartCamera(chartRoot.transform, projection);
             CreateChart(chartRoot.transform, wind, projection);
             var iconRoot = new GameObject("Icons");
             iconRoot.transform.SetParent(chartRoot.transform, false);
@@ -94,13 +94,28 @@ namespace Kitesim.Unity
                 sky.Track(kite);
             }
 
-            // Built last: Bind enables one root and disables the other, and the
-            // views must exist before that happens.
+            // The pilot's eyes go where the lead flier stands.
+            Vec3 leadPilot = new Vec3((0 - (pilotCount - 1) * 0.5) * pilotLateralSpacing, 0.0, 0.0);
+            sky.PlacePilot(leadPilot, wind);
+
+            // The chart, rendered from that same world through a fisheye at the lead
+            // pilot's hands, laid over the corner of whichever view is showing.
+            var fisheye = skyRoot.AddComponent<FisheyeChartView>();
+            fisheye.Build(wind, projection, leadPilot, new Color(0.07f, 0.09f, 0.12f, 1f));
+
+            // Built last: showing a view enables one camera and disables the rest,
+            // so every view must exist before that happens.
             var switcher = gameObject.AddComponent<WindowViewSwitcher>();
-            switcher.Bind(chartRoot, skyRoot, startInSkyView);
+            switcher.Add("Judge", skyRoot, sky.Camera);
+            switcher.Add("Pilot", skyRoot, sky.PilotCamera);
+            switcher.Add("Chart", chartRoot, chartCamera);
+            switcher.Show(startInSkyView ? 0 : 2);
+
+            var cornerToggle = gameObject.AddComponent<CornerChartToggle>();
+            cornerToggle.Bind(fisheye);
         }
 
-        private void CreateChartCamera(Transform parent, ChartProjection chartProjection)
+        private Camera CreateChartCamera(Transform parent, ChartProjection chartProjection)
         {
             var go = new GameObject("ChartCamera");
             go.transform.SetParent(parent, false);
@@ -110,6 +125,7 @@ namespace Kitesim.Unity
             cam.transform.position = new Vector3(0f, (float)WindowChart.EdgeRadius(chartProjection) * 0.5f, -10f);
             cam.backgroundColor = new Color(0.07f, 0.09f, 0.12f);
             cam.clearFlags = CameraClearFlags.SolidColor;
+            return cam;
         }
 
         private void CreateChart(Transform parent, WindField wind, ChartProjection chartProjection)

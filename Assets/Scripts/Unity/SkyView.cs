@@ -62,15 +62,40 @@ namespace Kitesim.Unity
         /// </summary>
         private static readonly Color SkyColor = new Color(0.80f, 0.84f, 0.87f);
 
+        /// <summary>Height of a standing pilot's eyes, metres.</summary>
+        [SerializeField] private float pilotEyeHeight = 1.65f;
+
         public Camera Camera { get; private set; }
 
-        private JudgeCameraRig rig;
+        /// <summary>The same world seen from the pilot's own eyes.</summary>
+        public Camera PilotCamera { get; private set; }
 
-        /// <summary>Kites the judge should keep in frame. Call after Build.</summary>
+        private JudgeCameraRig rig;
+        private JudgeCameraRig pilotRig;
+
+        /// <summary>Kites the cameras should keep in frame. Call after Build.</summary>
         public void Track(WindowKiteBehaviour kite)
         {
             if (rig != null)
                 rig.Track(kite);
+            if (pilotRig != null)
+                pilotRig.Track(kite);
+        }
+
+        /// <summary>
+        /// Put the pilot's camera at a flier's eyes. Their kite is what it will
+        /// follow, through the same neck the judge uses -- the only difference
+        /// between the two views is where the head is standing.
+        /// </summary>
+        public void PlacePilot(Vec3 pilotPosition, WindField wind)
+        {
+            if (PilotCamera == null)
+                return;
+
+            Vector3 downwind = WindowChart.Center(wind).ToVector3();
+            Vector3 eye = pilotPosition.ToVector3() + Vector3.up * pilotEyeHeight;
+            pilotRig.Configure(eye, Quaternion.AngleAxis(
+                -cameraAimElevation, Vector3.Cross(Vector3.up, downwind)) * downwind);
         }
 
         public void Build(WindField wind, double lineLength)
@@ -83,6 +108,7 @@ namespace Kitesim.Unity
             CreateWindArrow(downwind);
             CreateArcs(wind, lineLength);
             CreateCamera(downwind);
+            CreatePilotCamera(downwind);
         }
 
         private void CreateLight()
@@ -205,6 +231,37 @@ namespace Kitesim.Unity
 
             rig = go.AddComponent<JudgeCameraRig>();
             rig.Configure(rest, restAim);
+        }
+
+        /// <summary>
+        /// The pilot's own view of the same world. It reuses the judge's rig, which
+        /// is the point: a pilot and a judge both watch a kite with a human neck, and
+        /// two components pretending to be heads would drift apart. The base design
+        /// calls for this camera at M5.1; the world already exists, so it costs a
+        /// camera.
+        /// </summary>
+        private void CreatePilotCamera(Vec3 downwind)
+        {
+            var go = new GameObject("PilotCamera");
+            go.transform.SetParent(transform, false);
+
+            PilotCamera = go.AddComponent<Camera>();
+            PilotCamera.fieldOfView = fieldOfView;
+            PilotCamera.backgroundColor = SkyColor;
+            PilotCamera.clearFlags = CameraClearFlags.SolidColor;
+            PilotCamera.farClipPlane = Mathf.Max(1000f, groundSize * 2f);
+            PilotCamera.enabled = false;
+
+            pilotRig = go.AddComponent<JudgeCameraRig>();
+
+            // Standing still: a pilot walks a little but never retreats to frame a
+            // kite -- they are holding it.
+            pilotRig.NeverStepsBack();
+
+            Vector3 forward = downwind.ToVector3();
+            pilotRig.Configure(
+                Vector3.up * pilotEyeHeight,
+                Quaternion.AngleAxis(-cameraAimElevation, Vector3.Cross(Vector3.up, forward)) * forward);
         }
 
         private LineRenderer CreateLine(string label, Color color, float width)
