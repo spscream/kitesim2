@@ -220,6 +220,7 @@ namespace Kitesim.Unity
             Camera.backgroundColor = SkyColor;
             Camera.clearFlags = CameraClearFlags.SolidColor;
             Camera.farClipPlane = Mathf.Max(1000f, groundSize * 2f);
+            Camera.cullingMask = ViewLayers.WorldMask;
 
             Vector3 forward = downwind.ToVector3();
             Vector3 rest = -forward * cameraBackMetres + Vector3.up * cameraEyeHeight;
@@ -250,6 +251,7 @@ namespace Kitesim.Unity
             PilotCamera.backgroundColor = SkyColor;
             PilotCamera.clearFlags = CameraClearFlags.SolidColor;
             PilotCamera.farClipPlane = Mathf.Max(1000f, groundSize * 2f);
+            PilotCamera.cullingMask = ViewLayers.WorldMask;
             PilotCamera.enabled = false;
 
             pilotRig = go.AddComponent<JudgeCameraRig>();

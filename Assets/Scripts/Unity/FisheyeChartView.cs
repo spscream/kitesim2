@@ -20,7 +20,13 @@ namespace Kitesim.Unity
     /// </summary>
     public class FisheyeChartView : MonoBehaviour
     {
-        [SerializeField] private int cubeResolution = 512;
+        /// <summary>
+        /// The cube is sampled across the full width of the screen when the chart is
+        /// the view, so it carries the sharpness of the whole picture.
+        /// </summary>
+        [SerializeField] private int cubeResolution = 1024;
+
+        /// <summary>Height of the chart target; it is built twice this wide.</summary>
         [SerializeField] private int outputResolution = 512;
 
         /// <summary>Fraction of the screen height the corner chart occupies.</summary>
@@ -116,7 +122,9 @@ namespace Kitesim.Unity
             };
             cubemap.Create();
 
-            output = new RenderTexture(outputResolution, outputResolution, 0)
+            // Twice as wide as tall: the chart is the sky half of the disc, so a
+            // square target would waste half its pixels on nothing.
+            output = new RenderTexture(outputResolution * 2, outputResolution, 0)
             {
                 name = "FisheyeChart"
             };
@@ -156,6 +164,8 @@ namespace Kitesim.Unity
             cubeCamera.backgroundColor = new Color(0.80f, 0.84f, 0.87f);
             cubeCamera.nearClipPlane = 0.3f;
             cubeCamera.farClipPlane = 1500f;
+            // The chart shows the oversized kite, not the true-size one. See ViewLayers.
+            cubeCamera.cullingMask = ViewLayers.ChartMask;
         }
 
         private void CreateBackdropCamera(Color background)
@@ -187,8 +197,8 @@ namespace Kitesim.Unity
 
             // Bottom-right, square, sized against screen height so it keeps its
             // proportions on any window shape.
-            float side = Screen.height * screenFraction;
-            image.rectTransform.sizeDelta = new Vector2(side, side);
+            float width = Screen.height * screenFraction * 2f;
+            image.rectTransform.sizeDelta = new Vector2(width, width * 0.5f);
         }
 
         void LateUpdate()
@@ -199,15 +209,15 @@ namespace Kitesim.Unity
             if (!Showing)
                 return;
 
-            // Square either way, so the disc stays a disc: stretching it would
+            // Always 2:1, so the half-disc keeps its shape: stretching it would
             // falsify the projection this view exists to be exact about. Sized from
             // the canvas rather than from Screen, because a CanvasScaler can put the
             // two in different units and only the canvas is what the image lives in.
             Rect canvas = ((RectTransform)image.canvas.transform).rect;
-            float side = fullscreen
-                ? Mathf.Min(canvas.height, canvas.width)
-                : canvas.height * screenFraction;
-            image.rectTransform.sizeDelta = new Vector2(side, side);
+            float width = fullscreen
+                ? Mathf.Min(canvas.width, canvas.height * 2f)
+                : canvas.height * screenFraction * 2f;
+            image.rectTransform.sizeDelta = new Vector2(width, width * 0.5f);
 
             // Throttling a corner readout is free; throttling the view someone is
             // flying by is not.

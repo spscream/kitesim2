@@ -68,9 +68,18 @@ Shader "Kitesim/FisheyeChart"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                // Centre the disc; the render target is square, so this needs no
-                // aspect correction.
-                float2 p = i.uv * 2.0 - 1.0;
+                // Only the sky half of the disc is drawn, and the target is 2:1 to
+                // match. Nothing is lost by this: the chart centre is the horizontal
+                // downwind direction, so the whole flyable hemisphere already lands in
+                // the upper half -- a kite at azimuth 90 and elevation 45, for
+                // instance, sits on the rim at 45 degrees up and to the right. The
+                // lower half was the ground, and drawing it cost three quarters of
+                // the picture. This is also exactly the shape the flat chart draws:
+                // flat bottom for the ground, arc for the window edge.
+                //
+                // x spans -1..1 across the width, y spans 0..1 up the height, so the
+                // window centre sits at the bottom middle and the zenith at the top.
+                float2 p = float2(i.uv.x * 2.0 - 1.0, i.uv.y);
                 float r = length(p);
                 if (r > 1.0)
                     return _Outside;

@@ -32,6 +32,16 @@ namespace Kitesim.Unity
         [SerializeField] private float rollGain = 0.22f;
         [SerializeField] private float maxRollDegrees = 55f;
 
+        /// <summary>
+        /// How much larger than life the kite is drawn on the chart. The chart is an
+        /// instrument, and the flat chart always drew the kite as a fixed-size
+        /// triangle rather than at its true 3.2 degrees -- so this restores what the
+        /// chart already did rather than introducing a new distortion. At true size
+        /// the kite is about 22 px on a full-width chart; at 3x it is readable.
+        /// Only the chart sees it; the judge and pilot views get the real size.
+        /// </summary>
+        [SerializeField] private float chartExaggeration = 3f;
+
         [SerializeField] private float trailSeconds = 2.5f;
         [SerializeField] private float trailWidth = 0.6f;
         [SerializeField] private float lineWidth = 0.05f;
@@ -42,7 +52,8 @@ namespace Kitesim.Unity
         private WindowKiteBehaviour kite;
         private Color baseColor;
         private Transform model;
-        private Renderer modelRenderer;
+        private readonly System.Collections.Generic.List<Renderer> renderers =
+            new System.Collections.Generic.List<Renderer>();
         private LineRenderer leftLine;
         private LineRenderer rightLine;
 
@@ -60,39 +71,57 @@ namespace Kitesim.Unity
             rightLine = BuildLine("LineRight");
         }
 
+        /// <summary>
+        /// Two copies of the kite: one at life size for the judge and the pilot, one
+        /// exaggerated for the chart. Both are children of this transform, so they
+        /// fly together for free -- position, heading and roll are applied once, here.
+        /// Layers keep each camera to exactly one of them; see ViewLayers.
+        /// </summary>
         private void BuildModel(GameObject modelPrefab, double wingSpan)
         {
+            model = CreateCopy(modelPrefab, wingSpan, 1f, ViewLayers.KiteTrueSize);
+            CreateCopy(modelPrefab, wingSpan, chartExaggeration, ViewLayers.KiteChartSize);
+        }
+
+        private Transform CreateCopy(GameObject modelPrefab, double wingSpan, float exaggeration, int layer)
+        {
+            Transform copy;
             if (modelPrefab == null)
             {
                 Debug.LogWarning("[WindowKiteMesh] No kite model assigned; drawing a placeholder.");
-                model = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
-                Destroy(model.GetComponent<Collider>());
-                model.SetParent(transform, false);
-                model.localScale = new Vector3((float)wingSpan, 0.1f, (float)wingSpan * 0.45f);
+                copy = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
+                Destroy(copy.GetComponent<Collider>());
+                copy.SetParent(transform, false);
+                copy.localScale = new Vector3((float)wingSpan, 0.1f, (float)wingSpan * 0.45f) * exaggeration;
             }
             else
             {
-                model = Instantiate(modelPrefab, transform).transform;
-                model.localRotation = Quaternion.identity;
+                copy = Instantiate(modelPrefab, transform).transform;
+                copy.localRotation = Quaternion.identity;
 
-                float scale = (float)wingSpan / MeshSpan;
-                model.localScale = Vector3.one * scale;
+                float scale = (float)wingSpan / MeshSpan * exaggeration;
+                copy.localScale = Vector3.one * scale;
 
                 // The mesh's pivot is not its centre (bounds centre is at
                 // (0, -0.25, -0.45) in mesh units), so rotating this object would
                 // swing the kite around a point off its own body. Offset the model
                 // inside this transform to cancel that.
-                var filter = model.GetComponentInChildren<MeshFilter>();
+                var filter = copy.GetComponentInChildren<MeshFilter>();
                 if (filter != null && filter.sharedMesh != null)
-                    model.localPosition = -filter.sharedMesh.bounds.center * scale;
+                    copy.localPosition = -filter.sharedMesh.bounds.center * scale;
             }
 
-            modelRenderer = model.GetComponentInChildren<Renderer>();
-            if (modelRenderer != null)
+            ViewLayers.Apply(copy.gameObject, layer);
+
+            var renderer = copy.GetComponentInChildren<Renderer>();
+            if (renderer != null)
             {
                 var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-                modelRenderer.material = new Material(shader) { color = baseColor };
+                renderer.material = new Material(shader) { color = baseColor };
+                renderers.Add(renderer);
             }
+
+            return copy;
         }
 
         private void BuildTrail()
@@ -193,8 +222,6 @@ namespace Kitesim.Unity
 
         private void UpdateTint(KiteStateView view)
         {
-            if (modelRenderer == null)
-                return;
 
             // Tension reads as saturation, and the kite stays dark either way.
             //
@@ -206,8 +233,10 @@ namespace Kitesim.Unity
             // at three degrees across. So an unloaded kite desaturates toward dark
             // slate instead of fading, and stays visible.
             float load = Mathf.Clamp01((float)(view.Tension / 120.0));
-            modelRenderer.material.color = Color.Lerp(
+            Color tint = Color.Lerp(
                 Color.Lerp(baseColor, new Color(0.20f, 0.20f, 0.24f), 0.6f), baseColor, load);
+            foreach (Renderer renderer in renderers)
+                renderer.material.color = tint;
         }
     }
 }

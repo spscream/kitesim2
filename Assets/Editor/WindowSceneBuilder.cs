@@ -40,11 +40,44 @@ namespace Kitesim.Unity.EditorTools
             serialized.FindProperty("kiteModel").objectReferenceValue = model;
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
+            NameViewLayers();
+
             EditorSceneManager.SaveScene(scene, ScenePath);
             RegisterInBuildSettings();
             AssetDatabase.SaveAssets();
 
             Debug.Log($"WindowSceneBuilder: wrote {ScenePath}");
+        }
+
+        /// <summary>
+        /// Give the layers ViewLayers uses their names, so the scene is legible in
+        /// the inspector. Nothing at runtime depends on this -- culling masks work on
+        /// indices, and the scene builds correctly with the layers unnamed.
+        /// </summary>
+        private static void NameViewLayers()
+        {
+            var tagManager = new SerializedObject(
+                AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);
+            SerializedProperty layers = tagManager.FindProperty("layers");
+            if (layers == null)
+                return;
+
+            SetLayerName(layers, ViewLayers.KiteTrueSize, "KiteTrueSize");
+            SetLayerName(layers, ViewLayers.KiteChartSize, "KiteChartSize");
+            tagManager.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetLayerName(SerializedProperty layers, int index, string name)
+        {
+            if (index < 0 || index >= layers.arraySize)
+                return;
+
+            SerializedProperty layer = layers.GetArrayElementAtIndex(index);
+            if (string.IsNullOrEmpty(layer.stringValue))
+                layer.stringValue = name;
+            else if (layer.stringValue != name)
+                Debug.LogWarning($"WindowSceneBuilder: layer {index} is already '{layer.stringValue}', "
+                    + $"but ViewLayers wants it for '{name}'.");
         }
 
         private static void RegisterInBuildSettings()
