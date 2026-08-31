@@ -74,15 +74,20 @@ namespace Kitesim.Unity
         /// <summary>Sag is capped at this share of the line length; a real line lands first.</summary>
         [SerializeField] private float maxSagFraction = 0.12f;
 
-        /// <summary>Half the separation of the pilot's hands, metres.</summary>
-        [SerializeField] private float handSeparation = 0.35f;
-
         /// <summary>
-        /// Height of the handles above the ground. A flier holds them at about waist
-        /// to chest height, well below their eyes -- the first-person camera sits at
-        /// 1.65 m, so the lines correctly leave the frame low.
+        /// Where the handles are, relative to the pilot's feet: half the separation
+        /// between them, their height, and how far forward the arms reach. All three
+        /// come off the owner's competition footage, and all three must match the
+        /// pilot figure that holds them -- see Tools/blender/make_pilot.py, which
+        /// carries the same numbers.
+        ///
+        /// Fliers hold the handles close together at chest height with the arms out,
+        /// not spread wide at the waist: an earlier 0.7 m apart at 1.15 m was both
+        /// wrong and the reason the lines looked like they left from the knees.
         /// </summary>
-        [SerializeField] private float handHeight = 1.15f;
+        [SerializeField] private float handSeparation = 0.12f;
+        [SerializeField] private float handHeight = 1.34f;
+        [SerializeField] private float handReach = 0.48f;
 
         private WindowKiteBehaviour kite;
         private Color baseColor;
@@ -240,12 +245,17 @@ namespace Kitesim.Unity
         {
             Vector3 pilot = view.PilotPosition.ToVector3();
 
-            // Hands sit either side of the pilot, across the line to the kite.
+            // Hands sit either side of the pilot, across the line to the kite, and
+            // out in front of them: a flier faces their kite with both arms
+            // extended, which is also how the figure on the field is modelled.
             Vector3 toKite = kitePosition - pilot;
             Vector3 across = Vector3.Cross(Vector3.up, toKite);
             across = across.sqrMagnitude > 1e-6f ? across.normalized : Vector3.right;
 
-            Vector3 hands = pilot + Vector3.up * handHeight;
+            Vector3 forward = new Vector3(toKite.x, 0f, toKite.z);
+            forward = forward.sqrMagnitude > 1e-6f ? forward.normalized : Vector3.forward;
+
+            Vector3 hands = pilot + Vector3.up * handHeight + forward * handReach;
             float sag = Sag(view, toKite.magnitude, hands.y, kitePosition.y);
 
             DrawLine(leftLine, hands - across * handSeparation, kitePosition, sag);

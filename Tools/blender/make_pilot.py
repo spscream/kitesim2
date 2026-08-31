@@ -9,6 +9,10 @@ The model is generated rather than downloaded, so it lives in git as this script
 plus its output and can be changed by editing numbers here. Nothing about it is
 sculpted by hand.
 
+Scale is the one thing to check after any change here, and to check on the
+Renderer's world bounds in the running scene rather than on the mesh: the mesh
+can be right while the node it hangs on scales it by a hundred.
+
 Method: a stick figure of vertices and edges, thickened by the Skin modifier with
 a radius per joint, then smoothed by subdivision. That gives one continuous body
 with shoulders and limbs that taper, rather than a stack of capsules -- which is
@@ -29,8 +33,16 @@ import bmesh
 from mathutils import Vector
 
 HEIGHT = 1.75
-HAND_HEIGHT = 1.15      # matches WindowKiteMesh.handHeight
-HAND_SEPARATION = 0.30  # matches WindowKiteMesh.handSeparation
+
+# The three numbers WindowKiteMesh must agree with, taken off the owner's
+# competition footage rather than assumed. Fliers hold the handles close together
+# in front of the chest, not spread wide: about a hand's width apart, at chest
+# height, arms reaching forward. The first draft had them 0.6 m apart at 1.15 m,
+# which read as somebody carrying a tray.
+HAND_HEIGHT = 1.34      # matches WindowKiteMesh.handHeight
+HAND_SEPARATION = 0.12  # matches WindowKiteMesh.handSeparation
+HAND_REACH = 0.48       # matches WindowKiteMesh.handReach
+
 OUTPUT = "Assets/Models/Pilot_v01.fbx"
 
 # joint name -> (position, (radius across, radius fore-aft)). Radii are half
@@ -41,37 +53,45 @@ OUTPUT = "Assets/Models/Pilot_v01.fbx"
 # Heights follow the adult canon for 1.75 m: crotch at 0.47 of height, knee at
 # 0.28, shoulders at 0.82, eyes at 0.93. The first draft had the hips at 0.95 and
 # came out leggy, which is what those fractions are for.
+#
+# The stance is the one in the owner's footage, not a neutral standing pose. A
+# flier leans back against the pull with the hips pushed forward and the knees
+# bent -- they are holding tens of newtons out at the end of 45 m -- and looks up
+# at their kite. Standing straight, which is what the first version did, is what
+# a person does when nothing is pulling them.
 JOINTS = {
-    "hip":            (Vector((0.00, 0.00, 0.90)), (0.140, 0.105)),
-    "waist":          (Vector((0.00, -0.01, 1.07)), (0.112, 0.085)),
-    "chest":          (Vector((0.00, 0.01, 1.28)), (0.163, 0.120)),
-    "neck":           (Vector((0.00, 0.00, 1.47)), (0.050, 0.052)),
-    "head":           (Vector((0.00, 0.01, 1.60)), (0.090, 0.102)),
-    "crown":          (Vector((0.00, 0.00, 1.69)), (0.072, 0.078)),
+    "hip":            (Vector((0.00, 0.075, 0.88)), (0.140, 0.105)),
+    "waist":          (Vector((0.00, 0.030, 1.05)), (0.112, 0.085)),
+    "chest":          (Vector((0.00, -0.065, 1.25)), (0.163, 0.120)),
+    "neck":           (Vector((0.00, -0.115, 1.44)), (0.046, 0.048)),
+    "head":           (Vector((0.00, -0.105, 1.58)), (0.094, 0.106)),
+    "crown":          (Vector((0.00, -0.135, 1.67)), (0.074, 0.080)),
 
-    "shoulder.L":     (Vector((-0.21, 0.00, 1.42)), (0.058, 0.060)),
-    "elbow.L":        (Vector((-0.25, 0.17, 1.19)), (0.045, 0.047)),
-    "wrist.L":        (Vector((-0.29, 0.32, 1.14)), (0.031, 0.032)),
-    "hand.L":         (Vector((-HAND_SEPARATION, 0.39, 1.13)), (0.040, 0.050)),
+    # Arms reach forward to the handles, held a hand's width apart at chest
+    # height: the grip in the reference photographs.
+    "shoulder.L":     (Vector((-0.20, -0.090, 1.38)), (0.058, 0.060)),
+    "elbow.L":        (Vector((-0.19, 0.075, 1.24)), (0.045, 0.047)),
+    "wrist.L":        (Vector((-0.13, 0.390, 1.33)), (0.031, 0.032)),
+    "hand.L":         (Vector((-HAND_SEPARATION, HAND_REACH, HAND_HEIGHT)), (0.040, 0.050)),
 
-    "shoulder.R":     (Vector((0.21, 0.00, 1.42)), (0.058, 0.060)),
-    "elbow.R":        (Vector((0.25, 0.17, 1.19)), (0.045, 0.047)),
-    "wrist.R":        (Vector((0.29, 0.32, 1.14)), (0.031, 0.032)),
-    "hand.R":         (Vector((HAND_SEPARATION, 0.39, 1.13)), (0.040, 0.050)),
+    "shoulder.R":     (Vector((0.20, -0.090, 1.38)), (0.058, 0.060)),
+    "elbow.R":        (Vector((0.19, 0.075, 1.24)), (0.045, 0.047)),
+    "wrist.R":        (Vector((0.13, 0.390, 1.33)), (0.031, 0.032)),
+    "hand.R":         (Vector((HAND_SEPARATION, HAND_REACH, HAND_HEIGHT)), (0.040, 0.050)),
 
-    # Knees carry a little forward bend and the ankles sit back under the hips,
-    # so a leg reads as two segments instead of one column.
-    "hip.L":          (Vector((-0.11, 0.00, 0.86)), (0.086, 0.092)),
-    "knee.L":         (Vector((-0.14, 0.035, 0.49)), (0.056, 0.060)),
-    "ankle.L":        (Vector((-0.16, -0.01, 0.08)), (0.036, 0.038)),
-    "heel.L":         (Vector((-0.16, -0.07, 0.035)), (0.036, 0.040)),
-    "toe.L":          (Vector((-0.16, 0.16, 0.030)), (0.038, 0.052)),
+    # Knees bent and ahead of the ankles, feet planted behind the hips: the shape
+    # of somebody being pulled forward and refusing to go.
+    "hip.L":          (Vector((-0.11, 0.070, 0.85)), (0.086, 0.092)),
+    "knee.L":         (Vector((-0.13, 0.130, 0.48)), (0.056, 0.060)),
+    "ankle.L":        (Vector((-0.15, -0.055, 0.08)), (0.036, 0.038)),
+    "heel.L":         (Vector((-0.15, -0.115, 0.035)), (0.036, 0.040)),
+    "toe.L":          (Vector((-0.15, 0.105, 0.030)), (0.038, 0.052)),
 
-    "hip.R":          (Vector((0.11, 0.00, 0.86)), (0.086, 0.092)),
-    "knee.R":         (Vector((0.14, 0.035, 0.49)), (0.056, 0.060)),
-    "ankle.R":        (Vector((0.16, -0.01, 0.08)), (0.036, 0.038)),
-    "heel.R":         (Vector((0.16, -0.07, 0.035)), (0.036, 0.040)),
-    "toe.R":          (Vector((0.16, 0.16, 0.030)), (0.038, 0.052)),
+    "hip.R":          (Vector((0.11, 0.070, 0.85)), (0.086, 0.092)),
+    "knee.R":         (Vector((0.13, 0.130, 0.48)), (0.056, 0.060)),
+    "ankle.R":        (Vector((0.15, -0.055, 0.08)), (0.036, 0.038)),
+    "heel.R":         (Vector((0.15, -0.115, 0.035)), (0.036, 0.040)),
+    "toe.R":          (Vector((0.15, 0.105, 0.030)), (0.038, 0.052)),
 }
 
 BONES = [
@@ -234,6 +254,11 @@ def main():
         use_selection=False,
         apply_unit_scale=True,
         global_scale=1.0,
+        # Bake the unit scale into the vertices and leave the node at scale 1.
+        # Without this the file carries metres in the mesh *and* a scale of 100 on
+        # its node, and Unity multiplies the two: the figure came out 167 m tall,
+        # with the camera standing inside it and nothing on screen.
+        apply_scale_options="FBX_SCALE_ALL",
         # Unity's convention. Blender is Z-up and the figure faces +Y here, which
         # comes out standing on Y and facing +Z in Unity.
         axis_forward="-Z",

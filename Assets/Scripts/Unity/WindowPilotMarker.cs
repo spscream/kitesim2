@@ -90,12 +90,13 @@ namespace Kitesim.Unity
             figure.localRotation = Quaternion.identity;
 
             var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            // Darker than the kite's own colour: a person on a pale field is a
+            // silhouette, and the kite is what the eye should go to first. Only the
+            // colour is dimmed -- multiplying the Color would take the alpha down
+            // with it and ask for a transparent pilot.
+            var clothing = new Color(color.r * 0.55f, color.g * 0.55f, color.b * 0.55f, 1f);
             foreach (Renderer renderer in figure.GetComponentsInChildren<Renderer>())
-            {
-                // Darker than the kite's own colour: a person on a pale field is a
-                // silhouette, and the kite is what the eye should go to first.
-                renderer.material = new Material(shader) { color = color * 0.55f };
-            }
+                renderer.material = new Material(shader) { color = clothing };
         }
 
         private Renderer CreatePart(string label, float radius, float halfHeight, float centreHeight, Color color)
