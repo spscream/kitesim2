@@ -26,8 +26,32 @@ namespace Kitesim.Unity
         /// </summary>
         [SerializeField] private int cubeResolution = 1024;
 
-        /// <summary>Height of the chart target; it is built twice this wide.</summary>
+        /// <summary>Height of the chart target; its width follows from the margins.</summary>
         [SerializeField] private int outputResolution = 512;
+
+        /// <summary>
+        /// How much sky to show beyond the window edge, and how much ground below the
+        /// horizon, both in degrees. The ground band exists so a kite waiting to
+        /// launch is visible: it lies at elevation zero, exactly on the window rim at
+        /// the bottom of the frame, and without the band it was half cut off.
+        ///
+        /// These two values also set the shape of the chart. The frame spans
+        /// 2*(90 + overscan) degrees across and (90 + overscan + ground) up, so at 10
+        /// and 12.5 it comes out at exactly 16:9 and fills a widescreen window.
+        /// </summary>
+        [SerializeField] private float overscanDegrees = 10f;
+        [SerializeField] private float groundDegrees = 12.5f;
+
+        /// <summary>Width over height of the chart, set by the two margins above.</summary>
+        private float Aspect
+        {
+            get
+            {
+                float over = overscanDegrees / 90f;
+                float ground = groundDegrees / 90f;
+                return 2f * (1f + over) / (1f + over + ground);
+            }
+        }
 
         /// <summary>Fraction of the screen height the corner chart occupies.</summary>
         [SerializeField] private float screenFraction = 0.32f;
@@ -122,9 +146,11 @@ namespace Kitesim.Unity
             };
             cubemap.Create();
 
-            // Twice as wide as tall: the chart is the sky half of the disc, so a
-            // square target would waste half its pixels on nothing.
-            output = new RenderTexture(outputResolution * 2, outputResolution, 0)
+            // Shaped by the margins rather than square: the chart is the sky half of
+            // the disc plus a little beyond, so a square target would waste half its
+            // pixels on nothing.
+            output = new RenderTexture(
+                Mathf.RoundToInt(outputResolution * Aspect), outputResolution, 0)
             {
                 name = "FisheyeChart"
             };
@@ -135,6 +161,8 @@ namespace Kitesim.Unity
             material.SetFloat("_MaxTheta", (float)(90.0 * MathD.Deg2Rad));
             material.SetFloat("_Stereographic", projection == ChartProjection.Stereographic ? 1f : 0f);
             material.SetColor("_Outside", background);
+            material.SetFloat("_Overscan", overscanDegrees / 90f);
+            material.SetFloat("_GroundBand", groundDegrees / 90f);
 
             Vec3 centre = WindowChart.Center(wind);
             Vec3 right = WindowChart.Right(wind);
@@ -197,8 +225,8 @@ namespace Kitesim.Unity
 
             // Bottom-right, square, sized against screen height so it keeps its
             // proportions on any window shape.
-            float width = Screen.height * screenFraction * 2f;
-            image.rectTransform.sizeDelta = new Vector2(width, width * 0.5f);
+            float width = Screen.height * screenFraction * Aspect;
+            image.rectTransform.sizeDelta = new Vector2(width, width / Aspect);
         }
 
         void LateUpdate()
@@ -209,15 +237,17 @@ namespace Kitesim.Unity
             if (!Showing)
                 return;
 
-            // Always 2:1, so the half-disc keeps its shape: stretching it would
+            // The aspect is fixed by the margins, so the projection keeps its shape:
+            // any other ratio would stretch it, and stretching would
             // falsify the projection this view exists to be exact about. Sized from
             // the canvas rather than from Screen, because a CanvasScaler can put the
             // two in different units and only the canvas is what the image lives in.
             Rect canvas = ((RectTransform)image.canvas.transform).rect;
+            float aspect = Aspect;
             float width = fullscreen
-                ? Mathf.Min(canvas.width, canvas.height * 2f)
-                : canvas.height * screenFraction * 2f;
-            image.rectTransform.sizeDelta = new Vector2(width, width * 0.5f);
+                ? Mathf.Min(canvas.width, canvas.height * aspect)
+                : canvas.height * screenFraction * aspect;
+            image.rectTransform.sizeDelta = new Vector2(width, width / aspect);
 
             // Throttling a corner readout is free; throttling the view someone is
             // flying by is not.

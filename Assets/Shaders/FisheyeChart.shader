@@ -17,7 +17,8 @@ Shader "Kitesim/FisheyeChart"
         _MaxTheta ("Half angle of the disc, radians", Float) = 1.5707963
         _Stereographic ("Stereographic instead of equidistant", Float) = 0
         _Outside ("Colour outside the disc", Color) = (0.05, 0.06, 0.08, 1)
-        _EdgeSoftness ("Edge softness in uv", Float) = 0.004
+        _Overscan ("Sky shown beyond the window edge, in edge radii", Float) = 0.111
+        _GroundBand ("Ground shown below the horizon, in edge radii", Float) = 0.139
     }
 
     SubShader
@@ -38,7 +39,8 @@ Shader "Kitesim/FisheyeChart"
             float _MaxTheta;
             float _Stereographic;
             float4 _Outside;
-            float _EdgeSoftness;
+            float _Overscan;
+            float _GroundBand;
 
             // The chart frame in world space: where the centre of the disc points,
             // and which way is right and up on it.
@@ -77,11 +79,26 @@ Shader "Kitesim/FisheyeChart"
                 // the picture. This is also exactly the shape the flat chart draws:
                 // flat bottom for the ground, arc for the window edge.
                 //
-                // x spans -1..1 across the width, y spans 0..1 up the height, so the
-                // window centre sits at the bottom middle and the zenith at the top.
-                float2 p = float2(i.uv.x * 2.0 - 1.0, i.uv.y);
+                // r = 1 is the window edge and the zenith is at (0, 1), but the frame
+                // reaches past both: _Overscan of sky beyond the edge all round, and
+                // _GroundBand of ground below the horizon. A kite waiting to launch
+                // lies on the ground at elevation zero, exactly on the r = 1 rim at
+                // the bottom, so without that band it sat half cut off by the frame.
+                //
+                // Nothing is faked out there. Past the window edge the direction
+                // simply points upwind, behind the pilot, and the mapping stays the
+                // same r = theta throughout -- so the picture fills the frame with
+                // real sky and ground instead of dark corners, and the window edge is
+                // still plainly visible because SkyView draws it as an arc.
+                float2 p = float2(
+                    lerp(-(1.0 + _Overscan), 1.0 + _Overscan, i.uv.x),
+                    lerp(-_GroundBand, 1.0 + _Overscan, i.uv.y));
                 float r = length(p);
-                if (r > 1.0)
+
+                // Guard rather than a frame: at the corners r reaches about 1.57,
+                // which is 141 degrees. Only past 150 does the fisheye start folding
+                // in on itself, and nothing should ever be drawn there.
+                if (r * _MaxTheta > 2.618)
                     return _Outside;
 
                 float theta;
@@ -103,11 +120,7 @@ Shader "Kitesim/FisheyeChart"
                            + _ChartRight * (radial.x * sinTheta)
                            + _ChartUp * (radial.y * sinTheta);
 
-                fixed4 c = texCUBE(_Cube, dir);
-
-                // Feather the rim so the disc does not alias into a staircase.
-                float edge = smoothstep(1.0, 1.0 - _EdgeSoftness, r);
-                return lerp(_Outside, c, edge);
+                return texCUBE(_Cube, dir);
             }
             ENDCG
         }
