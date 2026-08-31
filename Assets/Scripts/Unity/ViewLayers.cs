@@ -22,14 +22,41 @@ namespace Kitesim.Unity
         /// <summary>Kite drawn oversized for the chart. Hidden from every other view.</summary>
         public const int KiteChartSize = 31;
 
+        /// <summary>
+        /// Marks where the pilots stand. The chart never shows these: its lens sits
+        /// in the lead pilot's hands, and a team stands within a metre of it, so a
+        /// neighbour's post half a metre from the lens smears across a quarter of the
+        /// chart. Measured, not feared -- it is what the first build did.
+        /// </summary>
+        public const int PilotMarker = 28;
+
+        /// <summary>
+        /// The lead pilot's own marker. Hidden from the chart for the reason above and
+        /// from the first-person view, which looks out of that pilot's own eyes; the
+        /// judge sees it like any other pilot on the field.
+        /// </summary>
+        public const int PilotSelf = 29;
+
         public const int KiteTrueSizeMask = 1 << KiteTrueSize;
         public const int KiteChartSizeMask = 1 << KiteChartSize;
+        public const int PilotMarkerMask = 1 << PilotMarker;
+        public const int PilotSelfMask = 1 << PilotSelf;
 
         /// <summary>Everything a normal camera should see: the world, minus chart symbols.</summary>
         public const int WorldMask = ~KiteChartSizeMask;
 
-        /// <summary>Everything the chart lens should see: the world, minus true-size kites.</summary>
-        public const int ChartMask = ~KiteTrueSizeMask;
+        /// <summary>
+        /// What a camera standing in the lead pilot's place should see: everything
+        /// except that pilot themselves. Team-mates stay visible -- they are part of
+        /// what a flier watches.
+        /// </summary>
+        public const int FirstPersonMask = WorldMask & ~PilotSelfMask;
+
+        /// <summary>
+        /// What the chart lens should see: the world, minus true-size kites, minus
+        /// every pilot marker.
+        /// </summary>
+        public const int ChartMask = ~KiteTrueSizeMask & ~PilotSelfMask & ~PilotMarkerMask;
 
         public static void Apply(UnityEngine.GameObject go, int layer)
         {

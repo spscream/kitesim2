@@ -65,6 +65,8 @@ namespace Kitesim.Unity
             sky.Build(wind, lineLength);
             var meshRoot = new GameObject("Kites");
             meshRoot.transform.SetParent(skyRoot.transform, false);
+            var markerRoot = new GameObject("Pilots");
+            markerRoot.transform.SetParent(skyRoot.transform, false);
 
             // Global, like the view switcher: a routine belongs to the team, not to
             // one pad, and it is recorded and replayed for everyone at once.
@@ -80,6 +82,7 @@ namespace Kitesim.Unity
                     -i * pilotDepthStep);
                 var kite = CreateKite(i, start, wind);
                 CreateMesh(i, kite, meshRoot.transform);
+                CreateMarker(i, kite, markerRoot.transform);
                 CreateInput(i, kite);
                 sky.Track(kite);
                 recorder.Register(kite);
@@ -114,6 +117,19 @@ namespace Kitesim.Unity
             var mesh = go.AddComponent<WindowKiteMesh>();
             mesh.Bind(kite, kiteModel, new KiteConfiguration().WingSpan,
                 PilotColors[index % PilotColors.Length]);
+        }
+
+        /// <summary>
+        /// A mark on the ground where this pilot stands. Pilot 0 is the lead flier,
+        /// whose eyes the first-person camera and the chart lens borrow, so their own
+        /// marker is built on the layer those two cull. See ViewLayers.
+        /// </summary>
+        private void CreateMarker(int index, WindowKiteBehaviour kite, Transform parent)
+        {
+            var go = new GameObject($"Pilot_{index}_Marker");
+            go.transform.SetParent(parent, false);
+            var marker = go.AddComponent<WindowPilotMarker>();
+            marker.Bind(kite, PilotColors[index % PilotColors.Length], isLeadPilot: index == 0);
         }
 
         private WindowKiteBehaviour CreateKite(int index, Vec3 start, WindField wind)

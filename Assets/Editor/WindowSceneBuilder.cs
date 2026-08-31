@@ -64,6 +64,8 @@ namespace Kitesim.Unity.EditorTools
 
             SetLayerName(layers, ViewLayers.KiteTrueSize, "KiteTrueSize");
             SetLayerName(layers, ViewLayers.KiteChartSize, "KiteChartSize");
+            SetLayerName(layers, ViewLayers.PilotMarker, "PilotMarker");
+            SetLayerName(layers, ViewLayers.PilotSelf, "PilotSelf");
             tagManager.ApplyModifiedPropertiesWithoutUndo();
         }
 

@@ -250,7 +250,7 @@ namespace Kitesim.Unity
             PilotCamera.backgroundColor = SkyColor;
             PilotCamera.clearFlags = CameraClearFlags.SolidColor;
             PilotCamera.farClipPlane = Mathf.Max(1000f, groundSize * 2f);
-            PilotCamera.cullingMask = ViewLayers.WorldMask;
+            PilotCamera.cullingMask = ViewLayers.FirstPersonMask;
             PilotCamera.enabled = false;
 
             pilotRig = go.AddComponent<JudgeCameraRig>();
