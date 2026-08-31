@@ -47,14 +47,19 @@ namespace Kitesim.Unity
         [SerializeField] private float trailWidth = 0.6f;
 
         /// <summary>
-        /// Line thickness at the hands and at the kite, metres. A real 45 m line is
-        /// about 1.5 mm and is simply invisible at 45 m, so the far end is drawn
-        /// thicker than life while the near end, the one a pilot has right in front
-        /// of their eyes, is kept close to the truth. Drawing both ends at the old
-        /// 5 cm was what made the lines read as hawsers running from the pilot's
-        /// knees rather than as lines out of their hands.
+        /// Line thickness at the hands and at the kite, metres.
+        ///
+        /// The near end is life size: docs/kite-anatomy.md section 6 puts the load
+        /// bearing section at about 0.5 mm2, which is 0.8 mm across, so a millimetre
+        /// with the sheath. That end is the one a flier sees against their own hands
+        /// and can compare with the real thing, so it is not the place to cheat.
+        ///
+        /// The far end is drawn fifty times thicker, and that is a deliberate lie:
+        /// at 45 m a millimetre of line covers a thousandth of a degree and there is
+        /// no way to show it at all. The taper between them is what keeps the line
+        /// both truthful in the hands and visible in the sky.
         /// </summary>
-        [SerializeField] private float lineWidthAtHands = 0.004f;
+        [SerializeField] private float lineWidthAtHands = 0.001f;
         [SerializeField] private float lineWidthAtKite = 0.05f;
 
         /// <summary>
