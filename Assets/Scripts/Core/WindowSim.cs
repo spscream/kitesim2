@@ -35,7 +35,33 @@ namespace Kitesim.Core
             PilotVelocity = Vec3.Zero;
         }
 
+        /// <summary>
+        /// One step with the hands where they are. The pilot's raw intent is taken to
+        /// be the hands themselves, which is right for everything except a controller
+        /// -- see the overload.
+        /// </summary>
         public void Step(WindowKiteState state, double dt, double handLeft, double handRight, double walkAxis)
+        {
+            Step(state, dt, handLeft, handRight, walkAxis, handLeft, handRight);
+        }
+
+        /// <summary>
+        /// One step, with the pilot's raw intent given separately from where their
+        /// hands have got to.
+        ///
+        /// The two differ on a controller. A real hand cannot jump, so the input
+        /// layer rate-limits it to human speed, and returning from full travel to
+        /// centre takes about 0.18 s. The kite goes on turning throughout -- at up to
+        /// 344 degrees a second -- so by the time the modelled hands say "released"
+        /// the turn has run tens of degrees past where the pilot let go. Measured
+        /// over a flight of 41 turns: a median of 26 degrees past the node, up to 44.
+        ///
+        /// That lag is a property of the hands and belongs in the flight. It is not a
+        /// property of what the pilot asked for, so the steering help reads the raw
+        /// stick: they let go when they let go.
+        /// </summary>
+        public void Step(WindowKiteState state, double dt, double handLeft, double handRight,
+            double walkAxis, double intentLeft, double intentRight)
         {
             UpdatePilot(dt, walkAxis);
 
@@ -100,7 +126,7 @@ namespace Kitesim.Core
             state.Speed = MathD.Max(state.Speed, 0.0);
 
             // Rotate the heading inside the tangent plane.
-            double turnRate = TurnRate(state, handLeft, handRight);
+            double turnRate = TurnRate(state, handLeft, handRight, intentLeft, intentRight);
             RememberTheTurn(state, turnRate, dt);
             double dPsi = turnRate * dt;
             Vec3 turnNormal = Vec3.Cross(t, p);
@@ -203,7 +229,18 @@ namespace Kitesim.Core
         /// unpowered, and the source literature (Erhard &amp; Strauch; Fechner et al.)
         /// treats this constant as fitted, not derived.
         /// </summary>
+        /// <summary>
+        /// The turn rate with the hands where they are, taking their position to be
+        /// what the pilot is asking for. True of real handles, and of everything
+        /// except a rate-limited controller.
+        /// </summary>
         public double TurnRate(WindowKiteState state, double handLeft, double handRight)
+        {
+            return TurnRate(state, handLeft, handRight, handLeft, handRight);
+        }
+
+        public double TurnRate(WindowKiteState state, double handLeft, double handRight,
+            double intentLeft, double intentRight)
         {
             double airspeed = MathD.Max(state.Speed, Config.MinAirspeed);
 
@@ -220,8 +257,14 @@ namespace Kitesim.Core
             // contain it and the suite has to be able to test it. It finishes a turn
             // the pilot has let go of; while they are still turning it returns their
             // own input untouched. See TurnAssist.
+            // The gesture comes from the hands, which is what the pilot's body did;
+            // whether they have let go comes from the raw intent, which is what they
+            // meant. On a controller those are 0.18 s apart.
+            double intentSteering = MathD.Clamp(
+                (intentRight - intentLeft) / (2.0 * Config.HandTravel), -1.0, 1.0);
+
             steering = TurnAssist.Steering(
-                state, steering,
+                state, steering, intentSteering,
                 handLeft / Config.HandTravel, handRight / Config.HandTravel,
                 HeadingRad(state), Config);
 

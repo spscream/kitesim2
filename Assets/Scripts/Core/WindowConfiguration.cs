@@ -190,11 +190,22 @@ namespace Kitesim.Core
         public double TurnAssistRestingHand = 0.25;
 
         /// <summary>
-        /// How far from a node the help reaches. Wider than the five degrees it can
-        /// actually fix, so that it fades in rather than appearing, and narrow enough
-        /// that a pilot aiming somewhere else is left alone.
+        /// How far from a node the help reaches, radians.
+        ///
+        /// Thirty degrees, and the number comes from a recorded flight rather than
+        /// from taste. Over 41 turns flown as squares, the pilot let go a median of
+        /// 21 degrees from the nearest right angle -- and that is at the true release,
+        /// not after the hands had caught up. At 300 degrees a second nobody can time
+        /// a right angle by eye; they let go when it looks about right. A ten degree
+        /// window caught nine of those turns, which is why nothing seemed to work.
+        ///
+        /// This is wider than "making up for the controller" and is worth saying
+        /// plainly: inside this window the help ends the corner for the pilot. The
+        /// owner's frame is what makes that legitimate -- this is a tool for learning
+        /// and remembering a routine, not a contest between joysticks -- and the help
+        /// switches off with one key.
         /// </summary>
-        public double TurnAssistCaptureRad = 10.0 * MathD.Deg2Rad;
+        public double TurnAssistCaptureRad = 30.0 * MathD.Deg2Rad;
 
         /// <summary>
         /// Two meanings, and they are the same number on purpose: the input below

@@ -43,7 +43,8 @@ namespace Kitesim.Core
         /// <param name="handRight">Right hand, as a fraction of full travel, back positive.</param>
         /// <param name="headingRad">Heading in the tangent plane, from the same frame as KiteStateView.</param>
         public static double Steering(
-            WindowKiteState state, double pilotSteering, double handLeft, double handRight,
+            WindowKiteState state, double pilotSteering, double intentSteering,
+            double handLeft, double handRight,
             double headingRad, WindowConfiguration config)
         {
             if (state == null || config == null || !config.TurnAssist)
@@ -60,26 +61,50 @@ namespace Kitesim.Core
             // nothing at all -- that is what lets a turn run through a node. What it
             // does do is watch the hands, because the gesture says which figure is
             // being flown, and by the time the hands come back to centre it is over.
-            if (MathD.Abs(pilotSteering) > config.TurnAssistFinishInput)
+            //
+            // The strongest gesture of the turn is the one that counts. Taking
+            // whatever the last frame held instead threw the answer away every time:
+            // measured over a flight, the corner had been read during 1313 frames
+            // and was zero at all 41 releases, because the frame before a release
+            // has the hands already half way home and that is not a corner.
+            if (MathD.Abs(intentSteering) > config.TurnAssistFinishInput)
             {
                 state.AssistTarget = double.NaN;
-                state.AssistGrid = GridFromGesture(handLeft, handRight, config);
+
+                double grid = GridFromGesture(handLeft, handRight, config);
+                if (grid > 0.0)
+                    state.AssistGrid = grid;
+
                 return pilotSteering;
             }
 
+            // The pilot has let go. From here the kite follows what they asked for
+            // and not where their hands have got to: a hand cannot snap back, so the
+            // input layer takes about 0.18 s to bring them home, and that deflection
+            // is the controller's lag rather than a command. Measured in a flight,
+            // leaving it in was enough to undo the whole finish -- the help brought
+            // the kite to the right angle, let go, and the hands, still at half
+            // travel, carried it thirty degrees past.
+            double released = intentSteering;
+
             if (double.IsNaN(state.AssistTarget))
             {
-                // Only a turn that was actually being flown can be finished.
+                // Only a turn that was actually being flown can be finished. A kite
+                // that has stopped turning also forgets the gesture, so an old corner
+                // cannot leak into the next figure.
                 if (state.RecentTurnRate < config.TurnAssistTurnRate)
-                    return pilotSteering;
+                {
+                    state.AssistGrid = 0.0;
+                    return released;
+                }
 
                 // And only one the pilot asked for with a corner's worth of hands.
                 if (state.AssistGrid <= 0.0)
-                    return pilotSteering;
+                    return released;
 
                 double toNode = ErrorToNearestNode(headingRad, state.AssistGrid);
                 if (MathD.Abs(toNode) > config.TurnAssistCaptureRad)
-                    return pilotSteering;
+                    return released;
 
                 state.AssistTarget = headingRad + toNode;
             }
@@ -96,7 +121,7 @@ namespace Kitesim.Core
                 // not keep a constant heading angle. One turn, one finish.
                 state.RecentTurnRate = 0.0;
                 state.AssistGrid = 0.0;
-                return pilotSteering;
+                return released;
             }
 
             // Full authority until the last few degrees, then proportional so the
@@ -105,7 +130,13 @@ namespace Kitesim.Core
             double wanted = error / MathD.Max(config.TurnAssistFinishBandRad, 1e-6);
             double finish = MathD.Clamp(wanted, -1.0, 1.0) * config.TurnAssistFinishInput;
 
-            return MathD.Clamp(pilotSteering + finish, -1.0, 1.0);
+            // The finish replaces the hands rather than adding to them. They are
+            // still deflected -- a hand cannot snap back, so the input layer takes
+            // about 0.18 s to bring them home -- but the pilot has let go, and that
+            // remaining deflection is the controller's lag rather than a command.
+            // Left in, it would keep the kite turning at hundreds of degrees a second
+            // straight past the node the finish is aiming for.
+            return finish;
         }
 
         /// <summary>

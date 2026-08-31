@@ -29,7 +29,7 @@ namespace Kitesim.Core.Tests
         /// <summary>Hands centred: the pilot has let go.</summary>
         private static double LetGo(WindowKiteState state, double headingDeg, WindowConfiguration config)
         {
-            return TurnAssist.Steering(state, 0.0, 0.0, 0.0, Deg(headingDeg), config);
+            return TurnAssist.Steering(state, 0.0, 0.0, 0.0, 0.0, Deg(headingDeg), config);
         }
 
         /// <summary>
@@ -42,8 +42,8 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            Assert.AreEqual(1.0, TurnAssist.Steering(state, 1.0, -1.0, 1.0, Deg(87), On()), 0.0);
-            Assert.AreEqual(-0.8, TurnAssist.Steering(state, -0.8, 1.0, -1.0, Deg(87), On()), 0.0);
+            Assert.AreEqual(1.0, TurnAssist.Steering(state, 1.0, 1.0, -1.0, 1.0, Deg(87), On()), 0.0);
+            Assert.AreEqual(-0.8, TurnAssist.Steering(state, -0.8, -0.8, 1.0, -1.0, Deg(87), On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget), "and nothing is being finished");
         }
 
@@ -69,12 +69,49 @@ namespace Kitesim.Core.Tests
         [Test]
         public void ATurnFlownWithSoftHandsIsLeftAlone()
         {
-            WindowKiteState state = JustReleased();
-            TurnAssist.Steering(state, 0.5, -0.25, 0.25, Deg(60), On());
+            WindowKiteState state = JustReleased(gridDeg: 0.0);
+            TurnAssist.Steering(state, 0.5, 0.5, -0.25, 0.25, Deg(60), On());
             Assert.AreEqual(0.0, state.AssistGrid, "no corner was asked for");
 
             Assert.AreEqual(0.0, LetGo(state, 87.0, On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
+        }
+
+        /// <summary>
+        /// The defect a flight found, and the reason nothing was ever helped: the
+        /// gesture is read every frame while the pilot steers, and the last frames
+        /// before a release have the hands already half way home, which is not a
+        /// corner. Taking whatever the last frame said threw the answer away every
+        /// time -- 1313 frames of corner read, and zero at all 41 releases.
+        /// </summary>
+        [Test]
+        public void TheGestureIsRememberedFromItsStrongestMomentNotItsLast()
+        {
+            WindowKiteState state = JustReleased(gridDeg: 0.0);
+
+            TurnAssist.Steering(state, 1.0, 1.0, -1.0, 1.0, Deg(50), On());
+            Assert.AreEqual(Deg(90), state.AssistGrid, 1e-12, "both hands hard: a corner");
+
+            // Hands on the way back, still above the finish threshold.
+            TurnAssist.Steering(state, 0.5, 0.5, -0.25, 0.25, Deg(80), On());
+            Assert.AreEqual(Deg(90), state.AssistGrid, 1e-12, "the corner is still what was asked for");
+
+            LetGo(state, 87.0, On());
+            Assert.AreEqual(Deg(90), state.AssistTarget, 1e-9, "and it finishes on the right angle");
+        }
+
+        /// <summary>
+        /// It does not carry over either: a corner flown a while ago must not decide
+        /// the next figure. When the kite stops turning the gesture is forgotten.
+        /// </summary>
+        [Test]
+        public void AGestureIsForgottenOnceTheTurnIsOver()
+        {
+            WindowKiteState state = JustReleased(recentTurnRate: 0.1, gridDeg: 90.0);
+
+            LetGo(state, 87.0, On());
+
+            Assert.AreEqual(0.0, state.AssistGrid);
         }
 
         [Test]
@@ -157,15 +194,17 @@ namespace Kitesim.Core.Tests
         }
 
         /// <summary>
-        /// A pilot who lets go a long way from the grid meant to be there. Twenty
-        /// degrees out is a choice, not a slip.
+        /// A pilot who lets go a long way from the grid meant to be there. Half way
+        /// between two right angles is a choice, not a slip.
         /// </summary>
         [Test]
         public void LettingGoFarFromAnyNodeIsLeftAlone()
         {
             WindowKiteState state = JustReleased();
 
-            Assert.AreEqual(0.0, LetGo(state, 65.0, On()), 0.0);
+            // Half way between two right angles: as far from the grid as it is
+            // possible to be, and unmistakably a choice.
+            Assert.AreEqual(0.0, LetGo(state, 45.0, On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
         }
 
@@ -227,7 +266,7 @@ namespace Kitesim.Core.Tests
             WindowKiteState state = JustReleased();
             LetGo(state, 87.0, On());
 
-            double steering = TurnAssist.Steering(state, -1.0, 1.0, -1.0, Deg(88), On());
+            double steering = TurnAssist.Steering(state, -1.0, -1.0, 1.0, -1.0, Deg(88), On());
 
             Assert.AreEqual(-1.0, steering, 0.0, "the pilot's input, untouched");
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
@@ -379,6 +418,34 @@ namespace Kitesim.Core.Tests
         }
 
         /// <summary>
+        /// The flight this was all measured from. Flying squares, the pilot let go a
+        /// median of 21 degrees from the right angle -- at the true release, before
+        /// the hands had caught up -- because at 300 degrees a second a right angle
+        /// cannot be timed by eye. So this is the case that has to work: let go 21
+        /// degrees short, with the hands still coming home over their own 0.18 s, and
+        /// the corner ends on the grid.
+        /// </summary>
+        [Test]
+        public void TheCaseFromTheRecordedFlightEndsOnTheGrid()
+        {
+            WindowSim sim = Sim(assist: true);
+            WindowKiteState state = Flying(20.0);
+
+            for (int i = 0; i < 400 && Heading(state) < 69.0; i++)
+                sim.Step(state, Dt, -Travel, Travel, 0.0, -Travel, Travel);
+
+            // Let go: intent is zero at once, the hands take 0.18 s to follow.
+            double hands = 1.0;
+            for (int i = 0; i < 100 && !double.IsNaN(state.AssistTarget) || i < 5; i++)
+            {
+                hands = MathD.Max(hands - 3.57 * Dt, 0.0);
+                sim.Step(state, Dt, -hands * Travel, hands * Travel, 0.0, 0.0, 0.0);
+            }
+
+            Assert.AreEqual(90.0, Heading(state), 2.0, $"ended at {Heading(state):F1} deg");
+        }
+
+        /// <summary>
         /// The figure this must not break: a half turn passes straight through the
         /// right angle, and a pilot holding the stick through it is not stopped
         /// there.
@@ -421,8 +488,8 @@ namespace Kitesim.Core.Tests
         [Test]
         public void ItCannotRescueATurnThatIsFarOut()
         {
-            double helped = ExitHeading(assist: true, releaseAt: 70.0);
-            double alone = ExitHeading(assist: false, releaseAt: 70.0);
+            double helped = ExitHeading(assist: true, releaseAt: 45.0);
+            double alone = ExitHeading(assist: false, releaseAt: 45.0);
 
             Assert.AreEqual(alone, helped, 0.001, "nothing to see this far from a node");
         }

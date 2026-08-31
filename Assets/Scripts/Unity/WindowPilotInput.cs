@@ -49,11 +49,18 @@ namespace Kitesim.Unity
             if (kite == null)
                 return;
 
-            float step = handRatePerSecond * Time.deltaTime;
-            smoothedLeft = Mathf.MoveTowards(smoothedLeft, pullLeft.ReadValue<float>(), step);
-            smoothedRight = Mathf.MoveTowards(smoothedRight, pullRight.ReadValue<float>(), step);
+            float rawLeft = pullLeft.ReadValue<float>();
+            float rawRight = pullRight.ReadValue<float>();
 
-            kite.SetInputs(smoothedLeft, smoothedRight, walk.ReadValue<float>());
+            float step = handRatePerSecond * Time.deltaTime;
+            smoothedLeft = Mathf.MoveTowards(smoothedLeft, rawLeft, step);
+            smoothedRight = Mathf.MoveTowards(smoothedRight, rawRight, step);
+
+            // The smoothed pair is where the hands have got to and is what flies the
+            // kite; the raw pair is what the pilot is asking for. They are the same
+            // thing on real handles and 0.18 s apart on a stick, which matters to the
+            // steering help and to nothing else.
+            kite.SetInputs(smoothedLeft, smoothedRight, walk.ReadValue<float>(), rawLeft, rawRight);
 
             if (launch.WasPressedThisFrame())
                 kite.Launch();

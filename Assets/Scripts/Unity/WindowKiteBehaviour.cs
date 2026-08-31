@@ -13,6 +13,8 @@ namespace Kitesim.Unity
         [SerializeField] private float handLeft;
         [SerializeField] private float handRight;
         [SerializeField] private float walkAxis;
+        [SerializeField] private float intentLeft;
+        [SerializeField] private float intentRight;
 
         private WindowSim sim;
         private WindowKiteState state;
@@ -68,11 +70,25 @@ namespace Kitesim.Unity
             state = WindowKiteState.OnGround(0.0);
         }
 
+        /// <summary>
+        /// Where the hands are. The raw pair is what the pilot is asking for before
+        /// the hands have caught up: on a controller the input layer rate-limits the
+        /// hands to human speed, so a release takes about 0.18 s to arrive, and the
+        /// steering help needs the intent rather than the lag. Callers with no
+        /// separate intent pass the hands twice.
+        /// </summary>
         public void SetInputs(float left, float right, float walk)
+        {
+            SetInputs(left, right, walk, left, right);
+        }
+
+        public void SetInputs(float left, float right, float walk, float rawLeft, float rawRight)
         {
             handLeft = left;
             handRight = right;
             walkAxis = walk;
+            intentLeft = rawLeft;
+            intentRight = rawRight;
         }
 
         public void Launch()
@@ -95,7 +111,9 @@ namespace Kitesim.Unity
             // Hand axes are positions in metres; the axis is scaled by the
             // configured half-travel. Walk is a rate and passes through raw.
             double travel = sim.Config.HandTravel;
-            sim.Step(state, Time.fixedDeltaTime, handLeft * travel, handRight * travel, walkAxis);
+            sim.Step(state, Time.fixedDeltaTime,
+                handLeft * travel, handRight * travel, walkAxis,
+                intentLeft * travel, intentRight * travel);
         }
     }
 }
