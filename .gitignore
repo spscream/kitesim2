@@ -31,3 +31,7 @@ UIElementsSchema/
 .verify-core/bin/
 .verify-core/obj/
 .calib/
+
+# Vendored Unity CLI agent skill: reinstall with
+#   unity skill install claude-code --local
+.claude/skills/
