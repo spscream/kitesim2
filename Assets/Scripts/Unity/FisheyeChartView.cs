@@ -39,13 +39,59 @@ namespace Kitesim.Unity
         private RenderTexture output;
         private Material material;
         private RawImage image;
-        private Transform anchor;
         private int frame;
 
-        public bool Visible
+        private bool cornerRequested = true;
+        private bool fullscreen;
+
+        /// <summary>
+        /// Clears the screen behind the disc when the chart is the whole view. The
+        /// chart is an overlay, not a camera, so without something drawing the
+        /// backbuffer there would be nothing underneath it. It renders no geometry --
+        /// the disc already contains the world.
+        /// </summary>
+        public Camera BackdropCamera { get; private set; }
+
+        /// <summary>Whether the corner overlay is wanted. Ignored while full screen.</summary>
+        public bool CornerVisible
         {
-            get => image != null && image.enabled;
-            set { if (image != null) image.enabled = value; }
+            get => cornerRequested;
+            set { cornerRequested = value; Apply(); }
+        }
+
+        /// <summary>Show the chart as the whole view rather than in the corner.</summary>
+        public void SetFullscreen(bool value)
+        {
+            fullscreen = value;
+            Apply();
+        }
+
+        private bool Showing => fullscreen || cornerRequested;
+
+        private void Apply()
+        {
+            if (image == null)
+                return;
+
+            image.enabled = Showing;
+            if (BackdropCamera != null)
+                BackdropCamera.enabled = fullscreen;
+
+            RectTransform rect = image.rectTransform;
+            if (fullscreen)
+            {
+                // Centred and as large as the window allows, keeping it square: the
+                // chart is a disc, and stretching it would falsify the projection
+                // this whole view exists to be exact about.
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+                rect.pivot = new Vector2(1f, 0f);
+                rect.anchoredPosition = new Vector2(-screenPadding, screenPadding);
+            }
         }
 
         /// <summary>
@@ -90,7 +136,9 @@ namespace Kitesim.Unity
             material.SetVector("_ChartUp", up.ToVector3());
 
             CreateCubeCamera(pilotPosition);
-            CreateCornerImage();
+            CreateBackdropCamera(background);
+            CreateImage();
+            Apply();
         }
 
         private void CreateCubeCamera(Vec3 pilotPosition)
@@ -110,7 +158,19 @@ namespace Kitesim.Unity
             cubeCamera.farClipPlane = 1500f;
         }
 
-        private void CreateCornerImage()
+        private void CreateBackdropCamera(Color background)
+        {
+            var go = new GameObject("ChartBackdrop");
+            go.transform.SetParent(transform, false);
+
+            BackdropCamera = go.AddComponent<Camera>();
+            BackdropCamera.clearFlags = CameraClearFlags.SolidColor;
+            BackdropCamera.backgroundColor = background;
+            BackdropCamera.cullingMask = 0;
+            BackdropCamera.enabled = false;
+        }
+
+        private void CreateImage()
         {
             var canvasGo = new GameObject("ChartCanvas");
             canvasGo.transform.SetParent(transform, false);
@@ -127,13 +187,8 @@ namespace Kitesim.Unity
 
             // Bottom-right, square, sized against screen height so it keeps its
             // proportions on any window shape.
-            var rect = image.rectTransform;
-            rect.anchorMin = new Vector2(1f, 0f);
-            rect.anchorMax = new Vector2(1f, 0f);
-            rect.pivot = new Vector2(1f, 0f);
             float side = Screen.height * screenFraction;
-            rect.sizeDelta = new Vector2(side, side);
-            rect.anchoredPosition = new Vector2(-screenPadding, screenPadding);
+            image.rectTransform.sizeDelta = new Vector2(side, side);
         }
 
         void LateUpdate()
@@ -141,13 +196,23 @@ namespace Kitesim.Unity
             if (cubeCamera == null || material == null)
                 return;
 
-            float side = Screen.height * screenFraction;
-            image.rectTransform.sizeDelta = new Vector2(side, side);
-
-            if (!Visible)
+            if (!Showing)
                 return;
 
-            if (refreshEveryNthFrame > 1 && frame++ % refreshEveryNthFrame != 0)
+            // Square either way, so the disc stays a disc: stretching it would
+            // falsify the projection this view exists to be exact about. Sized from
+            // the canvas rather than from Screen, because a CanvasScaler can put the
+            // two in different units and only the canvas is what the image lives in.
+            Rect canvas = ((RectTransform)image.canvas.transform).rect;
+            float side = fullscreen
+                ? Mathf.Min(canvas.height, canvas.width)
+                : canvas.height * screenFraction;
+            image.rectTransform.sizeDelta = new Vector2(side, side);
+
+            // Throttling a corner readout is free; throttling the view someone is
+            // flying by is not.
+            int every = fullscreen ? 1 : refreshEveryNthFrame;
+            if (every > 1 && frame++ % every != 0)
                 return;
 
             cubeCamera.RenderToCubemap(cubemap);

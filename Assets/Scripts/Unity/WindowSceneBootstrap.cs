@@ -108,8 +108,10 @@ namespace Kitesim.Unity
             var switcher = gameObject.AddComponent<WindowViewSwitcher>();
             switcher.Add("Judge", skyRoot, sky.Camera);
             switcher.Add("Pilot", skyRoot, sky.PilotCamera);
-            switcher.Add("Chart", chartRoot, chartCamera);
-            switcher.Show(startInSkyView ? 0 : 2);
+            switcher.Add("Fisheye chart", skyRoot, fisheye.BackdropCamera,
+                shown => fisheye.SetFullscreen(shown));
+            switcher.Add("Flat chart", chartRoot, chartCamera);
+            switcher.Show(startInSkyView ? 0 : 3);
 
             var cornerToggle = gameObject.AddComponent<CornerChartToggle>();
             cornerToggle.Bind(fisheye);

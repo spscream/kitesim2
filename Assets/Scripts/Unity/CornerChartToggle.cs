@@ -24,8 +24,8 @@ namespace Kitesim.Unity
             if (keyboard == null || chart == null || !keyboard[toggleKey].wasPressedThisFrame)
                 return;
 
-            chart.Visible = !chart.Visible;
-            Debug.Log($"[CornerChartToggle] corner chart {(chart.Visible ? "on" : "off")}");
+            chart.CornerVisible = !chart.CornerVisible;
+            Debug.Log($"[CornerChartToggle] corner chart {(chart.CornerVisible ? "on" : "off")}");
         }
     }
 }

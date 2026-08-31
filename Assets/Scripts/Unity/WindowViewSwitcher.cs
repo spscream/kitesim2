@@ -31,12 +31,19 @@ namespace Kitesim.Unity
             public string Name;
             public GameObject Root;
             public Camera Camera;
+
+            /// <summary>
+            /// Called with true when this view is chosen and false when it is left.
+            /// Not every view is just a camera: the fisheye chart is a screen overlay
+            /// that has to be told to fill the screen or go back to its corner.
+            /// </summary>
+            public System.Action<bool> OnShown;
         }
 
         /// <summary>Register a view. The first one registered is the one shown.</summary>
-        public void Add(string name, GameObject root, Camera camera)
+        public void Add(string name, GameObject root, Camera camera, System.Action<bool> onShown = null)
         {
-            views.Add(new View { Name = name, Root = root, Camera = camera });
+            views.Add(new View { Name = name, Root = root, Camera = camera, OnShown = onShown });
         }
 
         public void Show(int index)
@@ -57,6 +64,7 @@ namespace Kitesim.Unity
             {
                 if (views[i].Camera != null)
                     views[i].Camera.enabled = i == current;
+                views[i].OnShown?.Invoke(i == current);
             }
         }
 
