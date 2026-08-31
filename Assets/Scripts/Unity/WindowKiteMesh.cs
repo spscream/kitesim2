@@ -95,7 +95,14 @@ namespace Kitesim.Unity
         /// and crumpled the pair with every wrap.
         /// </summary>
         [SerializeField] private float lineContactRadius = 0.001f;
-        [SerializeField] private float lineMergeDistance = 3f;
+
+        /// <summary>
+        /// How far each end takes to close up, in that end's own separation. A fixed
+        /// distance was wrong: at three metres it left a fork out near the kite,
+        /// which read as the wrap living past the middle of the line, while at the
+        /// handles the same three metres were invisible.
+        /// </summary>
+        [SerializeField] private float lineMergeOverSeparations = 2f;
 
         /// <summary>
         /// Weight of one line per metre, newtons. From docs/kite-anatomy.md section 6:
@@ -332,7 +339,7 @@ namespace Kitesim.Unity
                 (hands - across * handSeparation).ToVec3(),
                 (hands + across * handSeparation).ToVec3(),
                 towLeft.ToVec3(), towRight.ToVec3(),
-                view.LineTurnsRad, sag, lineContactRadius, lineMergeDistance,
+                view.LineTurnsRad, sag, lineContactRadius, lineMergeOverSeparations,
                 leftPoints, rightPoints);
 
             Apply(leftLine, leftPoints);

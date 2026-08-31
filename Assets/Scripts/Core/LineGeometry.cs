@@ -45,15 +45,19 @@ namespace Kitesim.Core
         /// Half the gap between the lines where they are wound together: the radius of
         /// the line itself, a millimetre. Wound lines touch.
         /// </param>
-        /// <param name="mergeDistance">
-        /// How far from each end the pair closes up, metres. The handles and the
-        /// bridle hold the two lines apart, and a wrapped pair splays out over the
-        /// last few metres before reaching them.
+        /// <param name="mergeOverSeparations">
+        /// How far from each end the pair closes up, counted in that end's own
+        /// separation. Twisted lines converge over a distance set by how far apart
+        /// they are held, not by a fixed number of metres: the handles hold them
+        /// 0.24 m apart and close within half a metre, while the bridle holds them a
+        /// metre apart and takes a couple of metres. A fixed 3 m at both ends put a
+        /// visible fork far out towards the kite, which is what gave the wraps away
+        /// as living past the middle of the line.
         /// </param>
         public static void TwistedPair(
             Vec3 handLeft, Vec3 handRight,
             Vec3 towLeft, Vec3 towRight,
-            double turnsRad, double sag, double contactRadius, double mergeDistance,
+            double turnsRad, double sag, double contactRadius, double mergeOverSeparations,
             Vec3[] left, Vec3[] right)
         {
             if (left == null || right == null || left.Length < 2 || right.Length != left.Length)
@@ -85,7 +89,11 @@ namespace Kitesim.Core
             // brings them part of the way, which is what a half-wrapped pair does.
             double wound = MathD.Clamp01(MathD.Abs(turnsRad) / (2.0 * MathD.PI));
             double length = span.Length();
-            double merge = mergeDistance > 1e-6 ? mergeDistance : 1e-6;
+
+            // Each end closes over its own separation, so the fork at the bridle is
+            // as long as the bridle is wide and the one at the handles is a hand.
+            double mergeAtHands = System.Math.Max(2.0 * handRadius * mergeOverSeparations, 1e-6);
+            double mergeAtKite = System.Math.Max(2.0 * towRadius * mergeOverSeparations, 1e-6);
 
             for (int i = 0; i < left.Length; i++)
             {
@@ -97,8 +105,9 @@ namespace Kitesim.Core
                 // everywhere except near the two ends, where the handles and the
                 // bridle hold the lines apart.
                 double radius = MathD.Lerp(handRadius, towRadius, t);
-                double fromEnd = MathD.Min(t, 1.0 - t) * length;
-                double closed = wound * MathD.Clamp01(fromEnd / merge);
+                double alongFromHands = t * length / mergeAtHands;
+                double alongFromKite = (1.0 - t) * length / mergeAtKite;
+                double closed = wound * MathD.Clamp01(MathD.Min(alongFromHands, alongFromKite));
                 radius = MathD.Lerp(radius, MathD.Min(radius, contactRadius), closed);
 
                 Vec3 out_ = QuaternionD.AxisAngle(axis, total * t) * handAxis;

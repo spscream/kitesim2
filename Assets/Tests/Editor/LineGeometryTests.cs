@@ -8,7 +8,7 @@ namespace Kitesim.Core.Tests
         private const double HandHalf = 0.12;
         private const double TowHalf = 0.55;
         private const double Contact = 0.001;
-        private const double Merge = 3.0;
+        private const double Merge = 2.0;  // in end separations
 
         private static readonly Vec3 HandLeft = new Vec3(-HandHalf, 1.34, 0.0);
         private static readonly Vec3 HandRight = new Vec3(HandHalf, 1.34, 0.0);
@@ -147,8 +147,9 @@ namespace Kitesim.Core.Tests
             Build(3.0 * 2.0 * MathD.PI, 0.0, out Vec3[] left, out Vec3[] right, points: 451);
 
             double lineLength = (MidCentre(450, 451, 0.0) - MidCentre(0, 451, 0.0)).Length();
-            int justInside = (int)(450 * (0.3 * Merge / lineLength));
-            int wellInside = (int)(450 * (2.0 * Merge / lineLength));
+            double mergeAtHands = 2.0 * HandHalf * Merge;
+            int justInside = (int)(450 * (0.3 * mergeAtHands / lineLength));
+            int wellInside = (int)(450 * (2.0 * mergeAtHands / lineLength));
 
             Assert.AreEqual(2.0 * HandHalf, Distance(left[0], right[0]), 1e-9, "held apart at the handles");
             Assert.AreEqual(2.0 * TowHalf, Distance(left[450], right[450]), 1e-9, "held apart at the bridle");
