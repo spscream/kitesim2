@@ -27,6 +27,18 @@ namespace Kitesim.Unity
 
         public int PilotIndex => pilotIndex;
         public WindowSim Sim => sim;
+
+        /// <summary>
+        /// What the hands are doing and what the steering help has made of it, for
+        /// the flight recorder to write down. A track carries the kite's state, which
+        /// is the right thing to replay; this is the other half, and the only way to
+        /// tell a control problem from a model problem after the fact.
+        /// </summary>
+        public float HandLeft => handLeft;
+        public float HandRight => handRight;
+        public double RecentTurnRate => state != null ? state.RecentTurnRate : 0.0;
+        public double AssistGrid => state != null ? state.AssistGrid : 0.0;
+        public double AssistTarget => state != null ? state.AssistTarget : double.NaN;
         public bool Landed => playbackView.HasValue
             ? playbackView.Value.Landed
             : state != null && state.Landed;
