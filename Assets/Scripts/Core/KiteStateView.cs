@@ -22,7 +22,15 @@ namespace Kitesim.Core
         public readonly double LineLength;
         public readonly double Speed;
         public readonly double Tension;
-        public readonly int LineWraps;
+
+        /// <summary>
+        /// How far the kite has turned about its own line axis, radians, unwrapped
+        /// and signed. Carried as an angle rather than as whole wraps because the
+        /// lines are drawn twisted by it: a count that only moves in whole turns
+        /// would make the twist jump a full turn at a time.
+        /// </summary>
+        public readonly double LineTurnsRad;
+
         public readonly bool Landed;
 
         public KiteStateView(
@@ -32,7 +40,7 @@ namespace Kitesim.Core
             double lineLength,
             double speed,
             double tension,
-            int lineWraps,
+            double lineTurnsRad,
             bool landed)
         {
             PilotPosition = pilotPosition;
@@ -41,9 +49,16 @@ namespace Kitesim.Core
             LineLength = lineLength;
             Speed = speed;
             Tension = tension;
-            LineWraps = lineWraps;
+            LineTurnsRad = lineTurnsRad;
             Landed = landed;
         }
+
+        /// <summary>
+        /// Whole wraps of the kite's own pair of lines, truncated toward zero. Every
+        /// 360 degrees the kite turns about its lines is one wrap; control is not
+        /// lost, but they accumulate. See docs/kite-anatomy.md section 6.
+        /// </summary>
+        public int LineWraps => (int)(LineTurnsRad / (2.0 * MathD.PI));
 
         public Vec3 WorldPosition => PilotPosition + Direction * LineLength;
 

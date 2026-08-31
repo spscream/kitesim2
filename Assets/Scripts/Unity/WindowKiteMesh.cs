@@ -57,8 +57,30 @@ namespace Kitesim.Unity
         [SerializeField] private float lineWidthAtHands = 0.004f;
         [SerializeField] private float lineWidthAtKite = 0.05f;
 
-        /// <summary>Points per line. Enough to draw the sag as a curve, not a kink.</summary>
-        [SerializeField] private int lineSegments = 12;
+        /// <summary>
+        /// Points per line when the pair is clear, and how many more each wrap costs.
+        /// A twisted pair is a helix, and a helix drawn with too few points reads as
+        /// a zigzag, so the count grows with the twist rather than being fixed.
+        /// </summary>
+        [SerializeField] private int lineSegments = 14;
+        [SerializeField] private int segmentsPerWrap = 22;
+        [SerializeField] private int maxLineSegments = 260;
+
+        /// <summary>
+        /// Half the distance between the two towpoints on the bridle, metres. The
+        /// lines are not tied to one point on the kite: each goes to its own pigtail,
+        /// about over the centre of its outer sail panel (docs/kite-anatomy.md
+        /// section 2), which on a 2.5 m span puts them roughly a metre apart.
+        /// </summary>
+        [SerializeField] private float towpointSeparation = 0.5f;
+
+        /// <summary>
+        /// Half the width of the braid where twisted lines lie against each other.
+        /// Real lines touch, at a millimetre or two; this is drawn wider so that a
+        /// wrap can be seen from where a judge stands, in the same spirit as the
+        /// chart drawing the kite larger than life.
+        /// </summary>
+        [SerializeField] private float braidWidth = 0.06f;
 
         /// <summary>
         /// Weight of one line per metre, newtons. From docs/kite-anatomy.md section 6:
@@ -96,6 +118,12 @@ namespace Kitesim.Unity
             new System.Collections.Generic.List<Renderer>();
         private LineRenderer leftLine;
         private LineRenderer rightLine;
+
+        // Reused every frame: the shape is rebuilt continuously and none of this
+        // should reach the garbage collector.
+        private Vec3[] leftPoints = System.Array.Empty<Vec3>();
+        private Vec3[] rightPoints = System.Array.Empty<Vec3>();
+        private Vector3[] scratch = System.Array.Empty<Vector3>();
 
         private double previousHeading;
         private bool hasPreviousHeading;
@@ -187,7 +215,7 @@ namespace Kitesim.Unity
 
             var line = go.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
-            line.positionCount = Mathf.Max(2, lineSegments + 1);
+            line.positionCount = 2;
             line.startWidth = lineWidthAtHands;
             line.endWidth = lineWidthAtKite;
             line.numCapVertices = 0;
@@ -258,12 +286,51 @@ namespace Kitesim.Unity
             Vector3 hands = pilot + Vector3.up * handHeight + forward * handReach;
             float sag = Sag(view, toKite.magnitude, hands.y, kitePosition.y);
 
-            DrawLine(leftLine, hands - across * handSeparation, kitePosition, sag);
-            DrawLine(rightLine, hands + across * handSeparation, kitePosition, sag);
+            // Each line goes to its own towpoint, across the kite's span, so the pair
+            // ends where the bridle is and turns with the kite. transform.right is
+            // that span: the same rotation the mesh above is drawn with.
+            Vector3 span = transform.right;
+            Vector3 towLeft = kitePosition - span * towpointSeparation;
+            Vector3 towRight = kitePosition + span * towpointSeparation;
+
+            float wraps = Mathf.Abs((float)view.LineTurnsRad) / (2f * Mathf.PI);
+            int points = Mathf.Clamp(
+                lineSegments + Mathf.RoundToInt(segmentsPerWrap * wraps) + 1, 3, maxLineSegments);
+            EnsureBuffers(points);
+
+            LineGeometry.TwistedPair(
+                (hands - across * handSeparation).ToVec3(),
+                (hands + across * handSeparation).ToVec3(),
+                towLeft.ToVec3(), towRight.ToVec3(),
+                view.LineTurnsRad, sag, braidWidth,
+                leftPoints, rightPoints);
+
+            Apply(leftLine, leftPoints);
+            Apply(rightLine, rightPoints);
 
             bool flying = !view.Landed;
             leftLine.enabled = flying;
             rightLine.enabled = flying;
+        }
+
+        private void EnsureBuffers(int points)
+        {
+            if (leftPoints.Length == points)
+                return;
+
+            leftPoints = new Vec3[points];
+            rightPoints = new Vec3[points];
+            scratch = new Vector3[points];
+        }
+
+        private void Apply(LineRenderer line, Vec3[] points)
+        {
+            for (int i = 0; i < points.Length; i++)
+                scratch[i] = points[i].ToVector3();
+
+            if (line.positionCount != points.Length)
+                line.positionCount = points.Length;
+            line.SetPositions(scratch);
         }
 
         /// <summary>
@@ -285,22 +352,6 @@ namespace Kitesim.Unity
 
             float aboveGround = Mathf.Max(0.5f * (handHeightWorld + kiteHeight) - 0.05f, 0f);
             return Mathf.Min(sag, Mathf.Min(lineLength * maxSagFraction, aboveGround));
-        }
-
-        /// <summary>
-        /// A line from hand to kite, hanging under its own weight. The parabola
-        /// 4t(1-t) is the shallow-catenary shape to the accuracy anything here is
-        /// drawn at, and it pins both ends exactly where they belong.
-        /// </summary>
-        private void DrawLine(LineRenderer line, Vector3 hand, Vector3 kitePosition, float sag)
-        {
-            int points = line.positionCount;
-            for (int i = 0; i < points; i++)
-            {
-                float t = (float)i / (points - 1);
-                Vector3 point = Vector3.Lerp(hand, kitePosition, t);
-                line.SetPosition(i, point - Vector3.up * (sag * 4f * t * (1f - t)));
-            }
         }
 
         private void UpdateTint(KiteStateView view)

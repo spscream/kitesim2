@@ -15,13 +15,14 @@ namespace Kitesim.Core
     /// with "R" and the invariant culture: "R" round-trips a double bit for bit, so
     /// a replayed track follows the recorded path exactly rather than approximately,
     /// and the invariant culture keeps a comma-decimal locale from writing 0,5 and
-    /// splitting one column into two. LineWraps is a column of its own: it is the
-    /// quantity a judge counts, and a format that dropped it would look correct in
-    /// every other respect.
+    /// splitting one column into two. The twist of the lines is a column of its
+    /// own: whole wraps are what a judge counts, the lines are drawn twisted by the
+    /// angle behind them, and a format that dropped it would look correct in every
+    /// other respect.
     /// </summary>
     public static class TrackCsv
     {
-        public const string Header = "time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,wraps,landed";
+        public const string Header = "time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed";
 
         private const int ColumnCount = 15;
 
@@ -43,7 +44,7 @@ namespace Kitesim.Core
                 Append(text, f.Heading, culture);
                 text.Append(f.Speed.ToString("R", culture)).Append(',');
                 text.Append(f.Tension.ToString("R", culture)).Append(',');
-                text.Append(f.LineWraps.ToString(culture)).Append(',');
+                text.Append(f.LineTurnsRad.ToString("R", culture)).Append(',');
                 text.Append(f.Landed ? '1' : '0').Append('\n');
             }
 
@@ -92,7 +93,7 @@ namespace Kitesim.Core
                 if (!TryVec(c, 8, culture, out Vec3 heading)) continue;
                 if (!double.TryParse(c[11], NumberStyles.Float, culture, out double speed)) continue;
                 if (!double.TryParse(c[12], NumberStyles.Float, culture, out double tension)) continue;
-                if (!int.TryParse(c[13], NumberStyles.Integer, culture, out int wraps)) continue;
+                if (!double.TryParse(c[13], NumberStyles.Float, culture, out double turns)) continue;
 
                 track.Record(time, pilot, new KiteStateView(
                     pilotPosition,
@@ -103,7 +104,7 @@ namespace Kitesim.Core
                     0.0,
                     speed,
                     tension,
-                    wraps,
+                    turns,
                     c[14] == "1"));
             }
         }

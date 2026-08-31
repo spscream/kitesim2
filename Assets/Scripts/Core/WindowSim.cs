@@ -272,7 +272,7 @@ namespace Kitesim.Core
                 Config.LineLength,
                 state.Speed,
                 tension,
-                state.LineWraps,
+                state.AccumulatedTurn,
                 state.Landed);
         }
 

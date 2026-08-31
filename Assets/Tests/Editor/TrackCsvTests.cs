@@ -12,13 +12,13 @@ namespace Kitesim.Core.Tests
             var track = new Track();
             track.Record(0.0, 0, new KiteStateView(
                 new Vec3(-0.3, 0.0, 0.0), new Vec3(0.0, 0.6, 0.8), Vec3.Up,
-                45.0, 12.25, 84.5, 0, false));
+                45.0, 12.25, 84.5, 0.0, false));
             track.Record(0.0, 1, new KiteStateView(
                 new Vec3(0.3, 0.0, -0.5), new Vec3(0.0, 0.0, 1.0), Vec3.Up,
-                45.0, 0.0, 0.0, 0, true));
+                45.0, 0.0, 0.0, 0.0, true));
             track.Record(0.02, 0, new KiteStateView(
                 new Vec3(-0.3, 0.0, 0.1), new Vec3(0.1, 0.6, 0.79), new Vec3(1.0, 0.0, 0.0),
-                45.0, 13.0, 90.0, -2, false));
+                45.0, 13.0, 90.0, -2.5, false));
             return track;
         }
 
@@ -47,25 +47,26 @@ namespace Kitesim.Core.Tests
                 Assert.AreEqual(a.Heading.Z, b.Heading.Z, 0.0);
                 Assert.AreEqual(a.Speed, b.Speed, 0.0);
                 Assert.AreEqual(a.Tension, b.Tension, 0.0);
-                Assert.AreEqual(a.LineWraps, b.LineWraps, $"wraps of frame {i}");
+                Assert.AreEqual(a.LineTurnsRad, b.LineTurnsRad, 0.0, $"twist of frame {i}");
                 Assert.AreEqual(a.Landed, b.Landed, $"landed of frame {i}");
             }
         }
 
         /// <summary>
-        /// Line wraps are what a judge counts, so losing them in the file would
-        /// silently ruin the very thing tracks are recorded for.
+        /// Whole line wraps are what a judge counts and the angle behind them is
+        /// what the lines are drawn twisted by, so losing this column would silently
+        /// ruin the very thing tracks are recorded for.
         /// </summary>
         [Test]
         public void ANegativeWrapCountSurvivesTheRoundTrip()
         {
             var track = new Track();
             track.Record(1.0, 0, new KiteStateView(
-                Vec3.Zero, Vec3.Forward, Vec3.Up, 45.0, 5.0, 20.0, -3, false));
+                Vec3.Zero, Vec3.Forward, Vec3.Up, 45.0, 5.0, 20.0, -3.0 * 2.0 * MathD.PI, false));
 
             Track restored = TrackCsv.Read(TrackCsv.Write(track));
 
-            Assert.AreEqual(-3, restored.Frames[0].LineWraps);
+            Assert.AreEqual(-3.0 * 2.0 * MathD.PI, restored.Frames[0].LineTurnsRad, 0.0);
         }
 
         /// <summary>
@@ -79,7 +80,7 @@ namespace Kitesim.Core.Tests
             var track = new Track();
             track.Record(awkward, 0, new KiteStateView(
                 new Vec3(1e-9, -1e12, awkward), new Vec3(0.0, 1.0, 0.0), Vec3.Forward,
-                45.0, 1.0 / 3.0, double.Epsilon, 0, false));
+                45.0, 1.0 / 3.0, double.Epsilon, 0.0, false));
 
             Track restored = TrackCsv.Read(TrackCsv.Write(track));
 
@@ -122,7 +123,7 @@ namespace Kitesim.Core.Tests
             string csv = TrackCsv.Write(TwoPilotsFlying());
 
             string first = csv.Split('\n')[0].TrimEnd('\r');
-            Assert.AreEqual("time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,wraps,landed", first);
+            Assert.AreEqual("time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed", first);
         }
 
         [Test]
@@ -161,7 +162,7 @@ namespace Kitesim.Core.Tests
         {
             var target = new Track();
             target.Record(9.0, 0, new KiteStateView(
-                Vec3.Zero, Vec3.Forward, Vec3.Up, 45.0, 1.0, 1.0, 0, false));
+                Vec3.Zero, Vec3.Forward, Vec3.Up, 45.0, 1.0, 1.0, 0.0, false));
 
             TrackCsv.ReadInto(target, TrackCsv.Write(TwoPilotsFlying()));
 

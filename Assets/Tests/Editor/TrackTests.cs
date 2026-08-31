@@ -7,8 +7,10 @@ namespace Kitesim.Core.Tests
         private static KiteStateView View(Vec3 direction, Vec3 heading, double speed,
             int lineWraps = 0, bool landed = false)
         {
+            // Given in whole wraps because that is what these tests are about; the
+            // view carries the angle behind them.
             return new KiteStateView(Vec3.Zero, direction.Normalized(), heading.Normalized(),
-                45.0, speed, 60.0, lineWraps, landed);
+                45.0, speed, 60.0, lineWraps * 2.0 * MathD.PI, landed);
         }
 
         [Test]
@@ -48,13 +50,12 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(3, track.Sample(0.0, 0, 45.0).LineWraps);
             Assert.AreEqual(5, track.Sample(0.02, 0, 45.0).LineWraps);
 
-            // Nearest-neighbour, the same policy as Landed: a sample strictly between
-            // two recorded frames reports whichever frame is closer in time.
+            // The twist is an angle and lerps like one, so a sample between two
+            // frames lands between them rather than snapping to the nearer. The
+            // lines are drawn from this, and a jump of a whole turn would show.
             track.Record(1.0, 0, View(Vec3.Forward, Vec3.Up, 20.0, lineWraps: 9));
-            Assert.AreEqual(5, track.Sample(0.3, 0, 45.0).LineWraps,
-                "0.3 is closer to the frame at 0.02 than the frame at 1.0");
-            Assert.AreEqual(9, track.Sample(0.9, 0, 45.0).LineWraps,
-                "0.9 is closer to the frame at 1.0 than the frame at 0.02");
+            double halfWay = track.Sample(0.51, 0, 45.0).LineTurnsRad / (2.0 * MathD.PI);
+            Assert.AreEqual(7.0, halfWay, 0.1, "half way between five wraps and nine");
         }
 
         [Test]
