@@ -37,10 +37,20 @@ namespace Kitesim.Unity
         /// </summary>
         public const int PilotSelf = 29;
 
+        /// <summary>
+        /// The flying lines. Kept off the chart: its lens sits in the lead pilot's
+        /// hands, which is where the lines begin, so they would be drawn from inside
+        /// the camera -- and being held at a minimum width in pixels, they smear
+        /// across it. The chart shows where the kites are; the lines are for the
+        /// views that stand back and watch them.
+        /// </summary>
+        public const int KiteLines = 27;
+
         public const int KiteTrueSizeMask = 1 << KiteTrueSize;
         public const int KiteChartSizeMask = 1 << KiteChartSize;
         public const int PilotMarkerMask = 1 << PilotMarker;
         public const int PilotSelfMask = 1 << PilotSelf;
+        public const int KiteLinesMask = 1 << KiteLines;
 
         /// <summary>Everything a normal camera should see: the world, minus chart symbols.</summary>
         public const int WorldMask = ~KiteChartSizeMask;
@@ -54,9 +64,10 @@ namespace Kitesim.Unity
 
         /// <summary>
         /// What the chart lens should see: the world, minus true-size kites, minus
-        /// every pilot marker.
+        /// every pilot marker, minus the lines that start at the lens itself.
         /// </summary>
-        public const int ChartMask = ~KiteTrueSizeMask & ~PilotSelfMask & ~PilotMarkerMask;
+        public const int ChartMask =
+            ~KiteTrueSizeMask & ~PilotSelfMask & ~PilotMarkerMask & ~KiteLinesMask;
 
         public static void Apply(UnityEngine.GameObject go, int layer)
         {

@@ -47,20 +47,27 @@ namespace Kitesim.Unity
         [SerializeField] private float trailWidth = 0.6f;
 
         /// <summary>
-        /// Line thickness at the hands and at the kite, metres.
+        /// Thickness of a line, metres, and the floor under it in pixels.
         ///
-        /// The near end is life size: docs/kite-anatomy.md section 6 puts the load
-        /// bearing section at about 0.5 mm2, which is 0.8 mm across, so a millimetre
-        /// with the sheath. That end is the one a flier sees against their own hands
-        /// and can compare with the real thing, so it is not the place to cheat.
+        /// The line is life size everywhere: docs/kite-anatomy.md section 6 puts the
+        /// load bearing section at about 0.5 mm2, which is 0.8 mm across, so a
+        /// millimetre with the sheath.
         ///
-        /// The far end is drawn fifty times thicker, and that is a deliberate lie:
-        /// at 45 m a millimetre of line covers a thousandth of a degree and there is
-        /// no way to show it at all. The taper between them is what keeps the line
-        /// both truthful in the hands and visible in the sky.
+        /// A millimetre at forty metres covers a thousandth of a degree, far less
+        /// than a pixel, and a quad thinner than a pixel is not drawn dimmer -- it is
+        /// drawn or missed depending on where the pixel centres happen to fall, which
+        /// is why the lines were breaking up along their length and flickering.
+        /// Antialiasing cannot fix that: there is nothing to average when no sample
+        /// lands inside the shape. So the width is held at a pixel and a half
+        /// whenever life size would be thinner, which is the honest statement that
+        /// the display cannot resolve it rather than a decision to draw fat lines:
+        /// up close the line is a millimetre, and the floor only lifts with distance.
+        ///
+        /// This replaces a fixed 5 cm at the kite end, which was the same number by
+        /// hand: at the judge's distance a pixel and a half works out at 5.2 cm.
         /// </summary>
-        [SerializeField] private float lineWidthAtHands = 0.001f;
-        [SerializeField] private float lineWidthAtKite = 0.05f;
+        [SerializeField] private float lineWidth = 0.001f;
+        [SerializeField] private float minimumLinePixels = 1.5f;
 
         /// <summary>
         /// Points per line. Enough for the sag to read as a curve; the winding itself
@@ -132,6 +139,13 @@ namespace Kitesim.Unity
         private Vec3[] leftPoints = System.Array.Empty<Vec3>();
         private Vec3[] rightPoints = System.Array.Empty<Vec3>();
         private Vector3[] scratch = System.Array.Empty<Vector3>();
+
+        private readonly AnimationCurve widthCurve = new AnimationCurve(
+            new Keyframe(0f, 1f), new Keyframe(0.5f, 1f), new Keyframe(1f, 1f));
+        private readonly Keyframe[] widthKeys =
+        {
+            new Keyframe(0f, 1f), new Keyframe(0.5f, 1f), new Keyframe(1f, 1f)
+        };
 
         private double previousHeading;
         private bool hasPreviousHeading;
@@ -221,12 +235,15 @@ namespace Kitesim.Unity
             // so parenting them to the kite would drag one end around with it.
             go.transform.SetParent(transform.parent, false);
 
+            ViewLayers.Apply(go, ViewLayers.KiteLines);
+
             var line = go.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
             line.positionCount = 2;
-            line.startWidth = lineWidthAtHands;
-            line.endWidth = lineWidthAtKite;
+            line.widthMultiplier = lineWidth;
             line.numCapVertices = 0;
+            line.widthCurve = new AnimationCurve(
+                new Keyframe(0f, 1f), new Keyframe(0.5f, 1f), new Keyframe(1f, 1f));
             line.material = new Material(Shader.Find("Sprites/Default"));
 
             // Dark, not white. A line against a bright sky is seen against the light,
@@ -320,6 +337,8 @@ namespace Kitesim.Unity
 
             Apply(leftLine, leftPoints);
             Apply(rightLine, rightPoints);
+            HoldWidthAboveAPixel(leftLine, leftPoints);
+            HoldWidthAboveAPixel(rightLine, rightPoints);
 
             bool flying = !view.Landed;
             leftLine.enabled = flying;
@@ -334,6 +353,54 @@ namespace Kitesim.Unity
             leftPoints = new Vec3[points];
             rightPoints = new Vec3[points];
             scratch = new Vector3[points];
+        }
+
+        /// <summary>
+        /// Widen the line wherever a millimetre would fall below the pixel floor. The
+        /// near end, the middle and the far end are each measured against the camera
+        /// the viewer is actually looking through, and the curve between them does
+        /// the rest -- one line runs from a metre away to forty-five, so a single
+        /// width for the whole of it would be wrong at one end or the other.
+        /// </summary>
+        private void HoldWidthAboveAPixel(LineRenderer line, Vec3[] points)
+        {
+            Camera camera = WindowViewSwitcher.Watching;
+            if (camera == null)
+                return;
+
+            float near = WidthAt(points[0], camera);
+            float middle = WidthAt(points[points.Length / 2], camera);
+            float far = WidthAt(points[points.Length - 1], camera);
+
+            float widest = Mathf.Max(near, Mathf.Max(middle, far));
+            if (widest <= 0f)
+                return;
+
+            // The curve is a fraction of the multiplier, so it is normalised to the
+            // widest of the three and the multiplier carries the metres.
+            widthKeys[0].value = near / widest;
+            widthKeys[1].value = middle / widest;
+            widthKeys[2].value = far / widest;
+            widthCurve.keys = widthKeys;
+
+            line.widthCurve = widthCurve;
+            line.widthMultiplier = widest;
+        }
+
+        /// <summary>
+        /// Life size, or a pixel and a half if that is thicker. World size per pixel
+        /// at a distance d is 2*d*tan(fov/2) / pixel height -- the standard
+        /// perspective relation, so this needs no tuning when the field of view or
+        /// the window changes.
+        /// </summary>
+        private float WidthAt(Vec3 point, Camera camera)
+        {
+            float distance = Vector3.Distance(camera.transform.position, point.ToVector3());
+            float perPixel = 2f * distance
+                * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad)
+                / Mathf.Max(1, camera.pixelHeight);
+
+            return Mathf.Max(lineWidth, minimumLinePixels * perPixel);
         }
 
         private void Apply(LineRenderer line, Vec3[] points)

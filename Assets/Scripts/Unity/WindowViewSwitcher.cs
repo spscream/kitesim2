@@ -23,6 +23,14 @@ namespace Kitesim.Unity
         private readonly List<View> views = new List<View>();
         private int current;
 
+        /// <summary>
+        /// The camera the person watching is looking through. Static because the view
+        /// already is: one switcher exists per scene and the view belongs to whoever
+        /// is watching, not to any pilot. Anything that has to know how big a metre
+        /// is on screen -- the lines, which are a millimetre thick -- asks here.
+        /// </summary>
+        public static Camera Watching { get; private set; }
+
         private struct View
         {
             public string Name;
@@ -55,6 +63,8 @@ namespace Kitesim.Unity
                     views[i].Camera.enabled = i == current;
                 views[i].OnShown?.Invoke(i == current);
             }
+
+            Watching = views[current].Camera;
         }
 
         void Update()
