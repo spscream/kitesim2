@@ -119,7 +119,7 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &1124410948
+--- !u!1 &1747495160
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -127,8 +127,8 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1124410950}
-  - component: {fileID: 1124410949}
+  - component: {fileID: 1747495162}
+  - component: {fileID: 1747495161}
   m_Layer: 0
   m_Name: Bootstrap
   m_TagString: Untagged
@@ -136,13 +136,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1124410949
+--- !u!114 &1747495161
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1124410948}
+  m_GameObject: {fileID: 1747495160}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 30f187c235dd37749a666b8e7d10a279, type: 3}
@@ -152,18 +152,20 @@ MonoBehaviour:
     type: 3}
   kiteModel: {fileID: 919132149155446097, guid: bf9fbe863ca39a74189097c03d6c83a1,
     type: 3}
+  pilotModel: {fileID: 919132149155446097, guid: ba90adb57e75f05419490ba248990455,
+    type: 3}
   pilotCount: 1
   windSpeed: 5
   projection: 0
-  pilotLateralSpacing: 0.6
+  pilotLateralSpacing: 0.9
   pilotDepthStep: 0.5
---- !u!4 &1124410950
+--- !u!4 &1747495162
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1124410948}
+  m_GameObject: {fileID: 1747495160}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -176,4 +178,4 @@ Transform:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
-  - {fileID: 1124410950}
+  - {fileID: 1747495162}

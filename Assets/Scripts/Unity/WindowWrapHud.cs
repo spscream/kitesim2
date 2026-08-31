@@ -5,15 +5,19 @@ using Kitesim.Core;
 namespace Kitesim.Unity
 {
     /// <summary>
-    /// Shows how wound up each pair of kites is. The counting is PairWrapCounter's;
-    /// this only puts it on screen.
+    /// Shows how wound up the lines are: each kite's own wraps, and each pair's
+    /// wraps around each other. Both numbers are counted elsewhere -- the kite's own
+    /// by the model, in WindowKiteState.AccumulatedTurn, the pair's by
+    /// PairWrapCounter -- and this only puts them on screen.
     ///
-    /// Two or three wraps between a pair is normal and four is a problem, so the
-    /// number turns amber at three and red at four: a team plans the ballet so that
-    /// no pair runs out, and the point of showing it live is to learn what a routine
-    /// costs before the lines say so.
+    /// The two are different quantities and are shown apart on purpose. A kite's own
+    /// wraps come from it rolling about its own line axis; a pair's come from one
+    /// kite going around the other. Neither loses control on its own, both have a
+    /// critical count, and only the second is what a team plans a ballet around.
+    /// See docs/kite-anatomy.md section 6.
     ///
-    /// Nothing is drawn with a single pilot -- there is no pair to wind.
+    /// Two or three wraps is normal and four is a problem, so the number turns amber
+    /// at three and red at four.
     /// </summary>
     public class WindowWrapHud : MonoBehaviour
     {
@@ -58,33 +62,44 @@ namespace Kitesim.Unity
 
         void OnGUI()
         {
-            if (counter == null || counter.PilotCount < 2)
+            if (counter == null || counter.PilotCount < 1)
                 return;
 
             style ??= new GUIStyle(GUI.skin.label);
 
-            float width = 150f;
-            GUILayout.BeginArea(new Rect(Screen.width - width - 10f, 10f, width, 26f * PairCount() + 30f),
-                GUI.skin.box);
-            GUILayout.Label("line wraps");
+            float width = 160f;
+            // One row per kite, one per pair, plus the headings above each block.
+            int lines = counter.PilotCount + PairCount() + (PairCount() > 0 ? 2 : 1);
+            GUILayout.BeginArea(
+                new Rect(Screen.width - width - 10f, 10f, width, 18f * lines + 34f), GUI.skin.box);
 
-            for (int i = 0; i < counter.PilotCount; i++)
+            GUILayout.Label("own wraps");
+            for (int i = 0; i < counter.PilotCount && i < views.Length; i++)
+                Row($"kite {i + 1}", views[i].LineWraps);
+
+            if (PairCount() > 0)
             {
-                for (int j = i + 1; j < counter.PilotCount; j++)
+                GUILayout.Label("between kites");
+                for (int i = 0; i < counter.PilotCount; i++)
                 {
-                    int wraps = counter.Wraps(i, j);
-                    int magnitude = Mathf.Abs(wraps);
-                    style.normal.textColor = magnitude >= problemWraps
-                        ? new Color(0.95f, 0.35f, 0.30f)
-                        : magnitude >= cautionWraps
-                            ? new Color(0.95f, 0.80f, 0.25f)
-                            : Color.white;
-
-                    GUILayout.Label($"{i + 1}–{j + 1}:  {wraps}", style);
+                    for (int j = i + 1; j < counter.PilotCount; j++)
+                        Row($"{i + 1}–{j + 1}", counter.Wraps(i, j));
                 }
             }
 
             GUILayout.EndArea();
+        }
+
+        private void Row(string label, int wraps)
+        {
+            int magnitude = Mathf.Abs(wraps);
+            style.normal.textColor = magnitude >= problemWraps
+                ? new Color(0.95f, 0.35f, 0.30f)
+                : magnitude >= cautionWraps
+                    ? new Color(0.95f, 0.80f, 0.25f)
+                    : Color.white;
+
+            GUILayout.Label($"{label}:  {wraps}", style);
         }
 
         private int PairCount()

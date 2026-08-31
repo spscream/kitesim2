@@ -45,10 +45,44 @@ namespace Kitesim.Unity
 
         [SerializeField] private float trailSeconds = 2.5f;
         [SerializeField] private float trailWidth = 0.6f;
-        [SerializeField] private float lineWidth = 0.05f;
+
+        /// <summary>
+        /// Line thickness at the hands and at the kite, metres. A real 45 m line is
+        /// about 1.5 mm and is simply invisible at 45 m, so the far end is drawn
+        /// thicker than life while the near end, the one a pilot has right in front
+        /// of their eyes, is kept close to the truth. Drawing both ends at the old
+        /// 5 cm was what made the lines read as hawsers running from the pilot's
+        /// knees rather than as lines out of their hands.
+        /// </summary>
+        [SerializeField] private float lineWidthAtHands = 0.004f;
+        [SerializeField] private float lineWidthAtKite = 0.05f;
+
+        /// <summary>Points per line. Enough to draw the sag as a curve, not a kink.</summary>
+        [SerializeField] private int lineSegments = 12;
+
+        /// <summary>
+        /// Weight of one line per metre, newtons. From docs/kite-anatomy.md section 6:
+        /// 0.5-0.6 g/m of Dyneema, so about 0.05 N/m. This is what makes the sag a
+        /// derived number rather than a look: a line of length L under tension T sags
+        /// by about w*L*L/(8*T) in the middle, which at 45 m gives a quarter of a
+        /// metre under a working 50 N and metres when the kite goes slack at the
+        /// window edge. Slack lines sagging is exactly what the eye reads as line
+        /// rather than as rod.
+        /// </summary>
+        [SerializeField] private float lineWeightPerMetre = 0.05f;
+
+        /// <summary>Sag is capped at this share of the line length; a real line lands first.</summary>
+        [SerializeField] private float maxSagFraction = 0.12f;
 
         /// <summary>Half the separation of the pilot's hands, metres.</summary>
         [SerializeField] private float handSeparation = 0.35f;
+
+        /// <summary>
+        /// Height of the handles above the ground. A flier holds them at about waist
+        /// to chest height, well below their eyes -- the first-person camera sits at
+        /// 1.65 m, so the lines correctly leave the frame low.
+        /// </summary>
+        [SerializeField] private float handHeight = 1.15f;
 
         private WindowKiteBehaviour kite;
         private Color baseColor;
@@ -148,12 +182,13 @@ namespace Kitesim.Unity
 
             var line = go.AddComponent<LineRenderer>();
             line.useWorldSpace = true;
-            line.positionCount = 2;
-            line.startWidth = lineWidth;
-            line.endWidth = lineWidth;
+            line.positionCount = Mathf.Max(2, lineSegments + 1);
+            line.startWidth = lineWidthAtHands;
+            line.endWidth = lineWidthAtKite;
+            line.numCapVertices = 0;
             line.material = new Material(Shader.Find("Sprites/Default"));
-            line.startColor = new Color(0.9f, 0.9f, 0.9f, 0.45f);
-            line.endColor = new Color(0.9f, 0.9f, 0.9f, 0.25f);
+            line.startColor = new Color(0.9f, 0.9f, 0.9f, 0.55f);
+            line.endColor = new Color(0.9f, 0.9f, 0.9f, 0.30f);
             return line;
         }
 
@@ -210,15 +245,52 @@ namespace Kitesim.Unity
             Vector3 across = Vector3.Cross(Vector3.up, toKite);
             across = across.sqrMagnitude > 1e-6f ? across.normalized : Vector3.right;
 
-            Vector3 hands = pilot + Vector3.up * 1.2f;
-            leftLine.SetPosition(0, hands - across * handSeparation);
-            leftLine.SetPosition(1, kitePosition);
-            rightLine.SetPosition(0, hands + across * handSeparation);
-            rightLine.SetPosition(1, kitePosition);
+            Vector3 hands = pilot + Vector3.up * handHeight;
+            float sag = Sag(view, toKite.magnitude, hands.y, kitePosition.y);
+
+            DrawLine(leftLine, hands - across * handSeparation, kitePosition, sag);
+            DrawLine(rightLine, hands + across * handSeparation, kitePosition, sag);
 
             bool flying = !view.Landed;
             leftLine.enabled = flying;
             rightLine.enabled = flying;
+        }
+
+        /// <summary>
+        /// Depth of the sag at the middle of a line, metres: w*L*L/(8*T), the standard
+        /// shallow-catenary result, with the line's own weight from the reference and
+        /// the tension from the model. Both lines share the pull, so each carries half.
+        ///
+        /// Two limits on top of the formula. A share of the length, because the
+        /// shallow-catenary result stops being one for a rope hanging in a loop. And
+        /// the ground: at the low tension of a kite parked on the window edge the
+        /// formula asks for metres of sag, which is true and is exactly why a slack
+        /// line lies on the field rather than passing through it. Without this the
+        /// lines were drawn five metres underground.
+        /// </summary>
+        private float Sag(KiteStateView view, float lineLength, float handHeightWorld, float kiteHeight)
+        {
+            float tension = Mathf.Max((float)view.Tension * 0.5f, 0.01f);
+            float sag = lineWeightPerMetre * lineLength * lineLength / (8f * tension);
+
+            float aboveGround = Mathf.Max(0.5f * (handHeightWorld + kiteHeight) - 0.05f, 0f);
+            return Mathf.Min(sag, Mathf.Min(lineLength * maxSagFraction, aboveGround));
+        }
+
+        /// <summary>
+        /// A line from hand to kite, hanging under its own weight. The parabola
+        /// 4t(1-t) is the shallow-catenary shape to the accuracy anything here is
+        /// drawn at, and it pins both ends exactly where they belong.
+        /// </summary>
+        private void DrawLine(LineRenderer line, Vector3 hand, Vector3 kitePosition, float sag)
+        {
+            int points = line.positionCount;
+            for (int i = 0; i < points; i++)
+            {
+                float t = (float)i / (points - 1);
+                Vector3 point = Vector3.Lerp(hand, kitePosition, t);
+                line.SetPosition(i, point - Vector3.up * (sag * 4f * t * (1f - t)));
+            }
         }
 
         private void UpdateTint(KiteStateView view)
