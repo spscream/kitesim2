@@ -63,13 +63,11 @@ namespace Kitesim.Unity
         [SerializeField] private float lineWidthAtKite = 0.05f;
 
         /// <summary>
-        /// Points per line when the pair is clear, and how many more each wrap costs.
-        /// A twisted pair is a helix, and a helix drawn with too few points reads as
-        /// a zigzag, so the count grows with the twist rather than being fixed.
+        /// Points per line. Enough for the sag to read as a curve; the winding itself
+        /// needs none, because a wound pair lies together at the thickness of the
+        /// line and its helix is far too fine to see.
         /// </summary>
-        [SerializeField] private int lineSegments = 14;
-        [SerializeField] private int segmentsPerWrap = 22;
-        [SerializeField] private int maxLineSegments = 260;
+        [SerializeField] private int lineSegments = 16;
 
         /// <summary>
         /// Half the distance between the two towpoints on the bridle, metres. The
@@ -80,12 +78,17 @@ namespace Kitesim.Unity
         [SerializeField] private float towpointSeparation = 0.5f;
 
         /// <summary>
-        /// Half the width of the braid where twisted lines lie against each other.
-        /// Real lines touch, at a millimetre or two; this is drawn wider so that a
-        /// wrap can be seen from where a judge stands, in the same spirit as the
-        /// chart drawing the kite larger than life.
+        /// Half the gap between wound lines -- the radius of the line itself -- and
+        /// how far from each end the pair splays back out to the handles and to the
+        /// bridle.
+        ///
+        /// A wrapped pair travels as one line. You cannot count the turns on real
+        /// lines by looking, which is the whole reason the count is an instrument on
+        /// the screen; drawing a visible braid invited reading the count off the sky
+        /// and crumpled the pair with every wrap.
         /// </summary>
-        [SerializeField] private float braidWidth = 0.06f;
+        [SerializeField] private float lineContactRadius = 0.001f;
+        [SerializeField] private float lineMergeDistance = 3f;
 
         /// <summary>
         /// Weight of one line per metre, newtons. From docs/kite-anatomy.md section 6:
@@ -306,16 +309,13 @@ namespace Kitesim.Unity
             Vector3 towLeft = kitePosition - span * towpointSeparation;
             Vector3 towRight = kitePosition + span * towpointSeparation;
 
-            float wraps = Mathf.Abs((float)view.LineTurnsRad) / (2f * Mathf.PI);
-            int points = Mathf.Clamp(
-                lineSegments + Mathf.RoundToInt(segmentsPerWrap * wraps) + 1, 3, maxLineSegments);
-            EnsureBuffers(points);
+            EnsureBuffers(Mathf.Max(3, lineSegments + 1));
 
             LineGeometry.TwistedPair(
                 (hands - across * handSeparation).ToVec3(),
                 (hands + across * handSeparation).ToVec3(),
                 towLeft.ToVec3(), towRight.ToVec3(),
-                view.LineTurnsRad, sag, braidWidth,
+                view.LineTurnsRad, sag, lineContactRadius, lineMergeDistance,
                 leftPoints, rightPoints);
 
             Apply(leftLine, leftPoints);

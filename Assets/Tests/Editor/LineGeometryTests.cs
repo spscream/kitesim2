@@ -7,7 +7,8 @@ namespace Kitesim.Core.Tests
     {
         private const double HandHalf = 0.12;
         private const double TowHalf = 0.55;
-        private const double Contact = 0.06;
+        private const double Contact = 0.001;
+        private const double Merge = 3.0;
 
         private static readonly Vec3 HandLeft = new Vec3(-HandHalf, 1.34, 0.0);
         private static readonly Vec3 HandRight = new Vec3(HandHalf, 1.34, 0.0);
@@ -31,7 +32,7 @@ namespace Kitesim.Core.Tests
             right = new Vec3[points];
             Towpoints(roll, out Vec3 towLeft, out Vec3 towRight);
             LineGeometry.TwistedPair(HandLeft, HandRight, towLeft, towRight,
-                turnsRad, sag, Contact, left, right);
+                turnsRad, sag, Contact, Merge, left, right);
         }
 
         private static double Distance(Vec3 a, Vec3 b) => (a - b).Length();
@@ -117,11 +118,12 @@ namespace Kitesim.Core.Tests
         }
 
         /// <summary>
-        /// Twisted lines lie against each other, so the braid in the middle is
-        /// narrower than the pair is at either end. Untwisted, nothing is pinched.
+        /// A wrapped pair travels as one line, because that is what wound lines do:
+        /// they lie against each other and nobody counts the turns by looking. The
+        /// gap closes to the thickness of the line itself.
         /// </summary>
         [Test]
-        public void TwistPinchesTheMiddleTogetherAndNoTwistDoesNot()
+        public void AWrappedPairTravelsAsOneLine()
         {
             Build(0.0, 0.0, out Vec3[] clear, out Vec3[] clearRight);
             Build(2.0 * 2.0 * MathD.PI, 0.0, out Vec3[] wound, out Vec3[] woundRight);
@@ -131,7 +133,46 @@ namespace Kitesim.Core.Tests
             double woundGap = Distance(wound[middle], woundRight[middle]);
 
             Assert.AreEqual(2.0 * Contact, woundGap, 1e-6, "wound lines lie together");
-            Assert.Greater(clearGap, 3.0 * woundGap, "clear lines keep their spread");
+            Assert.Greater(clearGap, 100.0 * woundGap, "clear lines keep their spread");
+        }
+
+        /// <summary>
+        /// Wound or not, the pair is held apart at the two ends -- by the handles at
+        /// one and by the bridle at the other -- and closes up over the few metres
+        /// between. That splay is the only place the two lines are ever seen apart.
+        /// </summary>
+        [Test]
+        public void AWrappedPairStillSplaysAtTheHandlesAndAtTheBridle()
+        {
+            Build(3.0 * 2.0 * MathD.PI, 0.0, out Vec3[] left, out Vec3[] right, points: 451);
+
+            double lineLength = (MidCentre(450, 451, 0.0) - MidCentre(0, 451, 0.0)).Length();
+            int justInside = (int)(450 * (0.3 * Merge / lineLength));
+            int wellInside = (int)(450 * (2.0 * Merge / lineLength));
+
+            Assert.AreEqual(2.0 * HandHalf, Distance(left[0], right[0]), 1e-9, "held apart at the handles");
+            Assert.AreEqual(2.0 * TowHalf, Distance(left[450], right[450]), 1e-9, "held apart at the bridle");
+            Assert.Greater(Distance(left[justInside], right[justInside]), 4.0 * Contact,
+                "still splayed a metre from the handles");
+            Assert.AreEqual(2.0 * Contact, Distance(left[wellInside], right[wellInside]), 1e-6,
+                "closed up beyond the merge distance");
+        }
+
+        /// <summary>
+        /// Half a turn is half a wrap: the pair is drawn part of the way closed, so
+        /// the lines coming together is gradual rather than a switch.
+        /// </summary>
+        [Test]
+        public void HalfATurnClosesThePairHalfWay()
+        {
+            Build(MathD.PI, 0.0, out Vec3[] left, out Vec3[] right);
+            Build(0.0, 0.0, out Vec3[] clear, out Vec3[] clearRight);
+
+            int middle = left.Length / 2;
+            double halfGap = Distance(left[middle], right[middle]);
+            double clearGap = Distance(clear[middle], clearRight[middle]);
+
+            Assert.AreEqual(clearGap * 0.5, halfGap, clearGap * 0.05);
         }
 
         [Test]
@@ -174,11 +215,11 @@ namespace Kitesim.Core.Tests
             var one = new Vec3[1];
             var other = new Vec3[5];
             Assert.DoesNotThrow(() => LineGeometry.TwistedPair(
-                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, one, one));
+                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, Merge, one, one));
             Assert.DoesNotThrow(() => LineGeometry.TwistedPair(
-                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, one, other));
+                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, Merge, one, other));
             Assert.DoesNotThrow(() => LineGeometry.TwistedPair(
-                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, null, null));
+                HandLeft, HandRight, HandLeft, HandRight, 1.0, 0.0, Contact, Merge, null, null));
         }
 
         private static Vec3 Across(Vec3 left, Vec3 right, Vec3 axis)

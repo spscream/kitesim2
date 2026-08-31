@@ -11,12 +11,18 @@ namespace Kitesim.Core
     /// lines as they actually lie is what lets a flier see the count they are
     /// carrying without reading a number.
     ///
-    /// Two ends and a middle. The ends are pinned exactly where the handles and the
-    /// towpoints are, so the drawing never disagrees with the world it hangs in.
-    /// The middle carries the winding, distributed evenly along the length, and is
-    /// pinched together where the lines lie against each other: twisted lines touch,
-    /// and it is that narrow braid, not the separation at the ends, that reads as a
-    /// wrap.
+    /// What a wrapped pair looks like, and what it does not. Twisted lines lie
+    /// against each other and travel as **one** line: nobody counts the turns by
+    /// looking, which is exactly why the count is an instrument on the screen. So
+    /// the winding is drawn at the radius of the line itself -- the two strands
+    /// merge, and the helix they make is far too fine to see, as in life. Drawing it
+    /// as a visible braid was wrong twice over: it invited counting turns off the
+    /// screen, and it crumpled the pair with every wrap.
+    ///
+    /// They part again only at the two ends, over the last few metres, because the
+    /// handles hold them a hand apart and the bridle holds them a metre apart. That
+    /// splay at the ends and the single line between is the whole visible signature
+    /// of a wrapped pair.
     /// </summary>
     public static class LineGeometry
     {
@@ -36,14 +42,18 @@ namespace Kitesim.Core
         /// </param>
         /// <param name="sag">Depth of the sag at mid-span, metres, along world down.</param>
         /// <param name="contactRadius">
-        /// Half the width of the braid where the lines are wound together. Real lines
-        /// touch, at a millimetre or two; this is drawn wider so a wrap can be seen at
-        /// all, in the same spirit as the chart drawing the kite larger than life.
+        /// Half the gap between the lines where they are wound together: the radius of
+        /// the line itself, a millimetre. Wound lines touch.
+        /// </param>
+        /// <param name="mergeDistance">
+        /// How far from each end the pair closes up, metres. The handles and the
+        /// bridle hold the two lines apart, and a wrapped pair splays out over the
+        /// last few metres before reaching them.
         /// </param>
         public static void TwistedPair(
             Vec3 handLeft, Vec3 handRight,
             Vec3 towLeft, Vec3 towRight,
-            double turnsRad, double sag, double contactRadius,
+            double turnsRad, double sag, double contactRadius, double mergeDistance,
             Vec3[] left, Vec3[] right)
         {
             if (left == null || right == null || left.Length < 2 || right.Length != left.Length)
@@ -71,7 +81,11 @@ namespace Kitesim.Core
             double residual = SignedAngle(handAxis, towAxis, axis) - WrapPi(turnsRad);
             double total = turnsRad + WrapPi(residual);
 
-            double pinch = MathD.Clamp01(MathD.Abs(turnsRad) / (2.0 * MathD.PI));
+            // One whole turn is enough to bring the lines together; less than that
+            // brings them part of the way, which is what a half-wrapped pair does.
+            double wound = MathD.Clamp01(MathD.Abs(turnsRad) / (2.0 * MathD.PI));
+            double length = span.Length();
+            double merge = mergeDistance > 1e-6 ? mergeDistance : 1e-6;
 
             for (int i = 0; i < left.Length; i++)
             {
@@ -79,12 +93,13 @@ namespace Kitesim.Core
 
                 Vec3 centre = handCentre + span * t - Vec3.Up * (sag * 4.0 * t * (1.0 - t));
 
-                // Wound evenly along the length, and squeezed together in the middle,
-                // where twisted lines lie against one another. Both ends keep their
-                // true separation: the handles and the bridle hold them apart.
+                // Wound evenly along the length, and closed up to a single line
+                // everywhere except near the two ends, where the handles and the
+                // bridle hold the lines apart.
                 double radius = MathD.Lerp(handRadius, towRadius, t);
-                double braid = MathD.Sin(MathD.PI * t) * pinch;
-                radius = MathD.Lerp(radius, MathD.Min(radius, contactRadius), braid);
+                double fromEnd = MathD.Min(t, 1.0 - t) * length;
+                double closed = wound * MathD.Clamp01(fromEnd / merge);
+                radius = MathD.Lerp(radius, MathD.Min(radius, contactRadius), closed);
 
                 Vec3 out_ = QuaternionD.AxisAngle(axis, total * t) * handAxis;
                 left[i] = centre - out_ * radius;
