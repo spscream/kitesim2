@@ -66,6 +66,10 @@ namespace Kitesim.Unity
             var meshRoot = new GameObject("Kites");
             meshRoot.transform.SetParent(skyRoot.transform, false);
 
+            // Global, like the view switcher: a routine belongs to the team, not to
+            // one pad, and it is recorded and replayed for everyone at once.
+            var recorder = gameObject.AddComponent<WindowTrackRecorder>();
+
             for (int i = 0; i < pilotCount; i++)
             {
                 // Staircase: lead pilot furthest downwind, each following pilot a
@@ -78,6 +82,7 @@ namespace Kitesim.Unity
                 CreateMesh(i, kite, meshRoot.transform);
                 CreateInput(i, kite);
                 sky.Track(kite);
+                recorder.Register(kite);
             }
 
             // The pilot's eyes go where the lead flier stands.

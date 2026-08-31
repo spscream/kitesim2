@@ -5,7 +5,7 @@ namespace Kitesim.Unity
 {
     /// <summary>
     /// Drives one kite of the reduced wind-window model. Holds no rendering logic;
-    /// the chart renderer reads View each frame.
+    /// the views read View each frame.
     /// </summary>
     public class WindowKiteBehaviour : MonoBehaviour
     {
@@ -17,10 +17,32 @@ namespace Kitesim.Unity
         private WindowSim sim;
         private WindowKiteState state;
 
+        /// <summary>
+        /// Set while a recorded track is playing. Everything downstream -- the mesh,
+        /// the trail, the judge's framing, the rumble -- reads View, so replacing the
+        /// view here replays the routine everywhere at once, with no second path
+        /// through the scene that could drift from the live one.
+        /// </summary>
+        private KiteStateView? playbackView;
+
         public int PilotIndex => pilotIndex;
         public WindowSim Sim => sim;
-        public bool Landed => state != null && state.Landed;
-        public KiteStateView View => sim.View(state);
+        public bool Landed => playbackView.HasValue
+            ? playbackView.Value.Landed
+            : state != null && state.Landed;
+        public KiteStateView View => playbackView ?? sim.View(state);
+
+        /// <summary>Feed one replayed frame. The live model is frozen until Resume.</summary>
+        public void ShowPlaybackFrame(KiteStateView view)
+        {
+            playbackView = view;
+        }
+
+        /// <summary>Hand the kite back to the live model, exactly where it was left.</summary>
+        public void Resume()
+        {
+            playbackView = null;
+        }
 
         public void Configure(int index, Vec3 startPilotPosition, WindField wind)
         {
@@ -53,7 +75,9 @@ namespace Kitesim.Unity
 
         void FixedUpdate()
         {
-            if (sim == null)
+            // Frozen during playback: stepping the model under a replayed view would
+            // leave the kite somewhere else the moment playback stops.
+            if (sim == null || playbackView.HasValue)
                 return;
 
             // Hand axes are positions in metres; the axis is scaled by the
