@@ -127,6 +127,19 @@ namespace Kitesim.Core
         /// </summary>
         public double WeightTurnCoefficient = 1.0;
 
+        /// <summary>
+        /// Along-track gravity in the speed law, m/s^2. See the comment at its use in
+        /// WindowSim.Step: this one is derived and equals g exactly, because the
+        /// tether is radial and does no work along the heading, so there is no free
+        /// constant here the way there is in WeightTurnCoefficient.
+        ///
+        /// It is a field rather than a constant only so tests that want to isolate
+        /// the aerodynamic speed relaxation can switch it off. Setting it to zero
+        /// restores the speed-is-a-function-of-position behaviour the model had
+        /// before, in which height cannot be traded for speed at all.
+        /// </summary>
+        public double GravityAlongHeading = 9.80665;
+
         /// <summary>Turn rate per unit steering input per unit apparent wind, 1/m.</summary>
         public double SteeringGain = 0.5;
 

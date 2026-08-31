@@ -115,6 +115,11 @@ namespace Kitesim.Core.Tests
             var state = Flying(Vec3.Forward, Vec3.Up, 0.0);
 
             FreezeInPlace(sim);
+            // Isolate the aerodynamic relaxation: this test is about where the
+            // quasi-steady crosswind speed lands, and the kite is heading up the
+            // meridian, so the along-track gravity term would bleed it. That term has
+            // its own tests.
+            sim.Config.GravityAlongHeading = 0.0;
             Run(sim, state, 5.0);
 
             Assert.AreEqual(5.0 * sim.Config.GlideRatio, state.Speed, 0.5);
@@ -127,10 +132,137 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
+        public void GravityAlongHeading_IsExactlyTheAlongTrackComponent()
+        {
+            // The coefficient is derived, not fitted: the tether is radial and does
+            // no work along the heading, so the along-track force is exactly
+            // g * Dot(heading, down). Pinned one step at a time, with the kite
+            // started at its quasi-steady speed so the relaxation term contributes
+            // nothing and the gravity term is the only thing moving Speed.
+            //
+            // Held at 45 degrees of elevation: at ground level a nose-down kite lands
+            // inside the first step and the term never gets to act.
+            // The value is not a tuning knob: it is g, and nothing about this kite
+            // enters it. Contrast WeightTurnCoefficient, which is fitted per kite.
+            Assert.AreEqual(9.80665, new WindowConfiguration().GravityAlongHeading, 1e-12,
+                "along-track gravity is derived, so the default must be g itself");
+
+            double beta = 45.0 * MathD.Deg2Rad;
+            Vec3 direction = new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)).Normalized();
+            Vec3 up = KiteStateView.TangentUp(direction);
+
+            foreach (var (name, heading) in new[]
+            {
+                ("nose down", up * -1.0),
+                ("nose up", up),
+                ("level", KiteStateView.TangentRight(direction)),
+            })
+            {
+                var sim = MakeSim(6.0);
+                var state = Flying(direction, heading, 0.0);
+                state.Speed = sim.Config.GlideRatio * sim.EffectiveWind(direction);
+                double before = state.Speed;
+
+                sim.Step(state, Dt, 0.0, 0.0, 0.0);
+
+                double expected = before
+                                  - sim.Config.GravityAlongHeading * Vec3.Dot(heading, Vec3.Up) * Dt;
+                Assert.AreEqual(expected, state.Speed, 1e-9,
+                    $"heading {name}: the along-track gravity term must be exactly "
+                    + "g * Dot(heading, down) * dt, with nothing else moving Speed");
+            }
+
+            // The level case above is the one that pins the sign convention: a kite
+            // flying across the window neither gains nor loses anything to gravity.
+            var levelSim = MakeSim(6.0);
+            var level = Flying(direction, KiteStateView.TangentRight(direction), 0.0);
+            level.Speed = levelSim.Config.GlideRatio * levelSim.EffectiveWind(direction);
+            double unchanged = level.Speed;
+            levelSim.Step(level, Dt, 0.0, 0.0, 0.0);
+            Assert.AreEqual(unchanged, level.Speed, 1e-12);
+        }
+
+        [Test]
+        public void DivingOutOfTheWindowEdge_TradesHeightForSpeed()
+        {
+            // The owner's report: a real kite leaves the window edge far faster than
+            // this model let it. The cause was that Speed could only ever relax
+            // toward E * W_eff, making it a pure function of position -- a kite
+            // pointed straight down out of the edge held its edge speed, flat,
+            // forever, because the only way to speed up was to fly into more wind.
+            //
+            // Measured at 6 m/s: the fixed model runs 1.32 -> 2.5 -> 3.0 -> 3.8 ->
+            // 5.3 m/s over three seconds. The second half of this test pins the old
+            // defect by switching the term off, so a regression cannot pass quietly.
+            foreach (bool gravity in new[] { true, false })
+            {
+                var sim = MakeSim(6.0);
+                if (!gravity)
+                    sim.Config.GravityAlongHeading = 0.0;
+
+                Vec3 center = WindowChart.Center(sim.Wind);
+                Vec3 right = WindowChart.Right(sim.Wind);
+                double beta = 55.0 * MathD.Deg2Rad;
+                Vec3 direction = (right * MathD.Cos(beta) + Vec3.Up * MathD.Sin(beta)).Normalized();
+
+                // Nose down and inward, the way a pilot dives off the edge.
+                Vec3 down = KiteStateView.TangentUp(direction) * -1.0;
+                Vec3 inward = (center - direction * Vec3.Dot(center, direction)).Normalized();
+                var state = Flying(direction, down + inward, 0.0);
+
+                double edgeSpeed = sim.Config.GlideRatio * sim.EffectiveWind(direction);
+                state.Speed = edgeSpeed;
+
+                Run(sim, state, 3.0);
+
+                if (gravity)
+                    Assert.Greater(state.Speed, edgeSpeed * 3.0,
+                        "diving off the edge must trade height for speed, not hold the edge speed");
+                else
+                    Assert.AreEqual(edgeSpeed, state.Speed, 0.05,
+                        "with the term off the kite must show the old defect exactly: "
+                        + "speed pinned to what the local wind alone sustains");
+            }
+        }
+
+        [Test]
+        public void AStalledClimb_IsHeldAtTheWindDrivenFloorAndTheStateKeepsMoving()
+        {
+            // Guard on an absorbing state this fix introduced and then removed. A
+            // kite released on the window edge heading straight up is bled to a stop
+            // by gravity; at exactly that heading the weight term's lever
+            // Dot(down, Cross(heading, direction)) is also exactly zero, so the turn
+            // rate vanishes at the same moment. Speed zero plus turn rate zero means
+            // the state can never change again. Measured before the floor was added:
+            // the kite sat frozen for a full 3000 s probe.
+            var sim = MakeSim(6.0);
+            Vec3 center = WindowChart.Center(sim.Wind);
+            Vec3 right = WindowChart.Right(sim.Wind);
+            double beta = 50.0 * MathD.Deg2Rad;
+            Vec3 direction = (right * MathD.Cos(beta) + Vec3.Up * MathD.Sin(beta)).Normalized();
+            var state = Flying(direction, KiteStateView.TangentUp(direction), 0.0);
+            state.Speed = sim.Config.GlideRatio * sim.EffectiveWind(direction);
+
+            double floor = sim.Config.GlideRatio * sim.Config.PowerFloor * 6.0;
+            Vec3 wasAt = state.Direction;
+
+            Run(sim, state, 10.0);
+
+            Assert.GreaterOrEqual(state.Speed, floor - 1e-9,
+                "gravity may bleed a climbing kite almost to a stop, but never to a "
+                + "dead one -- zero speed here is an absorbing state");
+            Assert.Greater(1.0 - Vec3.Dot(state.Direction, wasAt), 1e-6,
+                "the kite must still be moving somewhere, not frozen on the edge");
+        }
+
+        [Test]
         public void AtWindowEdge_SpeedFallsToThePowerFloor()
         {
             var sim = MakeSim(5.0);
             FreezeInPlace(sim);
+            // Same isolation as AtWindowCentre: this is about the power law, not the
+            // along-track gravity term.
+            sim.Config.GravityAlongHeading = 0.0;
             // Directly crosswind at ground level: theta = 90 degrees.
             var state = Flying(new Vec3(1, 0, 0), Vec3.Up, 30.0);
 

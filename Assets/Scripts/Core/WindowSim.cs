@@ -3,7 +3,8 @@ namespace Kitesim.Core
     /// <summary>
     /// Reduced wind-window model. The kite is a point constrained to the sphere of
     /// radius LineLength around the pilot's hands, carrying a heading in the local
-    /// tangent plane. Speed relaxes toward the quasi-steady crosswind speed;
+    /// tangent plane. Speed relaxes toward the quasi-steady crosswind speed and
+    /// trades height for speed through along-track gravity;
     /// heading turns at a rate set by the steering law plus a fitted weight term;
     /// position advances along a great circle, which parallel-transports the
     /// heading. Step also clamps the kite to the downwind hemisphere (theta &lt;= 90 degrees) --
@@ -48,6 +49,47 @@ namespace Kitesim.Core
 
             double targetSpeed = Config.GlideRatio * effectiveWind;
             state.Speed += (targetSpeed - state.Speed) * MathD.Clamp01(dt / Config.SpeedLag);
+
+            // Trade height for speed. Without this the relaxation above is the only
+            // thing that can change Speed, so the kite's speed is a pure function of
+            // where it is in the window: a kite diving straight down out of the edge
+            // held its edge speed exactly, flat, forever, and could only ever speed
+            // up by flying into more wind. Measured before the fix, at 6 m/s wind, a
+            // kite released on the edge nose-down sat at 1.32 m/s for the whole dive.
+            //
+            // Unlike the weight term in TurnRate, this coefficient is derived, not
+            // fitted, and it is exactly g: the kite's velocity lies in the tangent
+            // plane, and the tether tension is radial, so tension does no work along
+            // the heading. That leaves the along-track component of gravity as
+            // g * Dot(heading, down), with no free constant to choose. The
+            // aerodynamic part of the along-track force is what the relaxation term
+            // above already stands in for, so this adds to it rather than
+            // double-counting it -- the crosswind speed E * W_eff is a lift-to-drag
+            // balance that neglects gravity entirely.
+            state.Speed += Config.GravityAlongHeading * -Vec3.Dot(t, Vec3.Up) * dt;
+
+            // Gravity may bleed a climbing kite almost to a stop, but not to a dead
+            // one. Letting it reach exactly zero creates an absorbing state this
+            // model cannot escape, and measurement found it immediately: a kite
+            // released on the window edge heading straight up stalls to zero, and at
+            // that heading the weight term's lever Dot(down, Cross(heading,
+            // direction)) is also exactly zero, so the turn rate vanishes too. Speed
+            // zero plus turn rate zero means nothing in the state can ever change
+            // again -- the exact window-edge trap the hemisphere clamp was written to
+            // remove, reintroduced through the speed law. Measured: 2 of the 3 cases
+            // in ReleasedExactlyOnTheEdge_TheBoundaryIsNotATrap sat frozen for the
+            // full 3000 s probe.
+            //
+            // A real kite there stalls and falls off, but stalls are outside this
+            // model by construction (see the class comment). So instead the kite is
+            // held at the same wind-driven speed the window edge already produces,
+            // Config.PowerFloor of the wind carried through the glide ratio. That is
+            // a floor, not a target: a kite climbing in the powered centre still
+            // bleeds from tens of m/s down to this value, so "climbing costs speed"
+            // survives nearly intact. It only forbids the dead stop.
+            double stallFloor = Config.GlideRatio * Config.PowerFloor * Wind.Speed;
+            if (state.Speed < stallFloor)
+                state.Speed = stallFloor;
 
             // This model has no reverse flight. Upwind of the window edge,
             // EffectiveWind goes negative (deliberately -- see EffectiveWind's
