@@ -103,13 +103,29 @@ namespace Kitesim.Unity
 
         private void CreateInput(int index, WindowKiteBehaviour kite)
         {
+            // Built inactive on purpose. new GameObject(...) returns an active object,
+            // and AddComponent<PlayerInput>() runs Awake/OnEnable synchronously — if
+            // that happened before "actions" and "defaultActionMap" were assigned,
+            // PlayerInput would enable nothing and every action would silently read
+            // as never-pressed forever after, with no exception to point at it. Keep
+            // the object inactive until it is fully configured, then activate it once
+            // so Awake/OnEnable run exactly once with everything already in place.
             var go = new GameObject($"Pilot_{index}");
+            go.SetActive(false);
+
             var playerInput = go.AddComponent<PlayerInput>();
             playerInput.actions = inputActions;
             playerInput.defaultActionMap = "Player";
 
             var pilot = go.AddComponent<WindowPilotInput>();
             pilot.Bind(kite);
+
+            go.SetActive(true);
+
+            var playerMap = playerInput.actions != null ? playerInput.actions.FindActionMap("Player") : null;
+            var deviceNames = string.Join(", ", System.Array.ConvertAll(playerInput.devices.ToArray(), d => d.displayName));
+            Debug.Log($"[WindowSceneBootstrap] Pilot {index}: Player map enabled={playerMap != null && playerMap.enabled}, " +
+                $"devices={playerInput.devices.Count} [{deviceNames}], controlScheme={playerInput.currentControlScheme}");
         }
     }
 }
