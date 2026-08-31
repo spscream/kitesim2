@@ -14,6 +14,7 @@ namespace Kitesim.Unity.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/WindowScene.unity";
         private const string ActionsPath = "Assets/kitesim.inputactions";
+        private const string ModelPath = "Assets/Models/Fury_v01.blend";
 
         [MenuItem("Kitesim/Rebuild Window Scene")]
         public static void Build()
@@ -28,8 +29,15 @@ namespace Kitesim.Unity.EditorTools
             if (actions == null)
                 Debug.LogError($"WindowSceneBuilder: {ActionsPath} not found");
 
+            // The judge's view instantiates this; without it WindowKiteMesh falls
+            // back to a placeholder box and says so.
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
+            if (model == null)
+                Debug.LogError($"WindowSceneBuilder: {ModelPath} not found");
+
             var serialized = new SerializedObject(bootstrap);
             serialized.FindProperty("inputActions").objectReferenceValue = actions;
+            serialized.FindProperty("kiteModel").objectReferenceValue = model;
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.SaveScene(scene, ScenePath);

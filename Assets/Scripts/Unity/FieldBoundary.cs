@@ -7,9 +7,38 @@ namespace Kitesim.Unity
         [SerializeField] private float fieldSize = 110f;
         [SerializeField] private float yellowInset = 3f;
 
+        private bool built;
+
+        /// <summary>
+        /// Build now with explicit dimensions, instead of waiting for Start to do it
+        /// with the serialized defaults.
+        ///
+        /// createGround exists because a caller may already own the ground: the
+        /// judge's view lays a much larger plane for the horizon, and a second one
+        /// here would z-fight with it. See SkyView.
+        /// </summary>
+        public void Configure(float size, float inset, bool createGround)
+        {
+            fieldSize = size;
+            yellowInset = inset;
+            Build(createGround);
+        }
+
         void Start()
         {
-            CreateGround();
+            Build(createGround: true);
+        }
+
+        private void Build(bool createGround)
+        {
+            // Configure may have run before Start; building twice would leave two
+            // sets of lines on top of each other.
+            if (built)
+                return;
+            built = true;
+
+            if (createGround)
+                CreateGround();
             DrawBoundary("RedBoundary", fieldSize, Color.red, 0.05f);
             DrawBoundary("YellowBoundary", fieldSize - 2f * yellowInset, Color.yellow, 0.04f);
         }

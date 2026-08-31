@@ -28,6 +28,22 @@ namespace Kitesim.Core
 
         public static double Clamp01(double value) => Clamp(value, 0.0, 1.0);
 
+        /// <summary>
+        /// Folds an angle into [-pi, pi). Used wherever two angles that came out of
+        /// Atan2 are differenced: the raw difference jumps by 2*pi when either
+        /// crosses the branch cut, which reads as an enormous rotation in one step.
+        /// </summary>
+        public static double WrapPi(double radians)
+        {
+            double turn = 2.0 * PI;
+            double wrapped = System.Math.IEEERemainder(radians, turn);
+            if (wrapped >= PI)
+                wrapped -= turn;
+            else if (wrapped < -PI)
+                wrapped += turn;
+            return wrapped;
+        }
+
         public static double Lerp(double a, double b, double t)
         {
             return a + (b - a) * Clamp01(t);
