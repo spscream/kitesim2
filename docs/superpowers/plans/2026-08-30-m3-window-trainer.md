@@ -3071,7 +3071,7 @@ All of these must hold before M4 starts:
 
 1. `cd .verify-core && dotnet test` reports 60 passing tests.
 2. In `WindowScene`, four pilots can fly simultaneously on four gamepads.
-3. Kite speed at the window centre in 5 m/s wind settles between 25 and 35 m/s.
+3. Kite speed across the competition wind envelope matches practice: roughly 50 km/h at 5 m/s wind, under 100 km/h at the novice ceiling of 8.33 m/s, and under 135 km/h at the masters ceiling of 12.5 m/s.
 4. Kite speed at the edge arc falls below 3 m/s.
 5. A slow kite flying across the window is turned toward the ground at over a radian per second, and walking upwind raises its speed by more than half. Note that walking does **not** keep the kite airborne in this model — measured, it lands sooner, because the extra speed carries it further along its gravity-curved path per second. Steering is what keeps it up. See the spec's §4a correction.
 6. A recorded routine replays with the kites following the same paths.
