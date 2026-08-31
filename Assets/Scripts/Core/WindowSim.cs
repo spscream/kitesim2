@@ -4,9 +4,9 @@ namespace Kitesim.Core
     /// Reduced wind-window model. The kite is a point constrained to the sphere of
     /// radius LineLength around the pilot's hands, carrying a heading in the local
     /// tangent plane. Speed relaxes toward the quasi-steady crosswind speed;
-    /// heading turns at a rate set by the steering law plus gravity; position
-    /// advances along a great circle, which parallel-transports the heading. Step
-    /// also clamps the kite to the downwind hemisphere (theta &lt;= 90 degrees) --
+    /// heading turns at a rate set by the steering law plus a fitted weight term;
+    /// position advances along a great circle, which parallel-transports the
+    /// heading. Step also clamps the kite to the downwind hemisphere (theta &lt;= 90 degrees) --
     /// see the comment in Step for why that boundary exists.
     ///
     /// This model assumes the kite always flies nose-first like a wing. It does not
@@ -21,8 +21,6 @@ namespace Kitesim.Core
     /// </summary>
     public class WindowSim
     {
-        private const double Gravity = 9.80665;
-
         public WindowConfiguration Config;
         public WindField Wind;
         public Vec3 PilotPosition;
@@ -152,10 +150,15 @@ namespace Kitesim.Core
         /// Turn rate about the tether axis, radians per second.
         ///
         /// The steering term is the Erhard-Strauch law: linear in the steering input
-        /// and in the apparent wind. The gravity term is derived rather than fitted.
-        /// The component of gravity perpendicular to the flight direction inside the
-        /// tangent plane, divided by speed, is the turn rate it produces; written in
-        /// angles that is g * cos(beta) * sin(psi) / v, exactly the published form.
+        /// and in the apparent wind. The weight term keeps the closed form of that
+        /// same published law -- the component of a downward vector perpendicular to
+        /// the flight direction inside the tangent plane, divided by speed, written
+        /// in angles as c * cos(beta) * sin(psi) / v -- but the constant c is
+        /// Config.WeightTurnCoefficient, a fitted-per-kite parameter (see
+        /// WindowConfiguration), not literally g. Deriving it from an unpowered
+        /// point mass on a sphere over-constrains the model: a real kite is not
+        /// unpowered, and the source literature (Erhard &amp; Strauch; Fechner et al.)
+        /// treats this constant as fitted, not derived.
         /// </summary>
         public double TurnRate(WindowKiteState state, double handLeft, double handRight)
         {
@@ -166,10 +169,10 @@ namespace Kitesim.Core
 
             // Unit tangent 90 degrees from the heading toward increasing psi.
             Vec3 turnNormal = Vec3.Cross(state.Heading, state.Direction);
-            Vec3 gravity = new Vec3(0.0, -Gravity, 0.0);
+            Vec3 weight = new Vec3(0.0, -Config.WeightTurnCoefficient, 0.0);
 
             return Config.SteeringGain * airspeed * steering
-                   + Vec3.Dot(gravity, turnNormal) / airspeed;
+                   + Vec3.Dot(weight, turnNormal) / airspeed;
         }
 
         /// <summary>

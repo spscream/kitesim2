@@ -27,6 +27,29 @@ namespace Kitesim.Core.Tests
             };
         }
 
+        /// <summary>
+        /// Stretch the line until the kite barely advances along the sphere (sigma =
+        /// speed * dt / LineLength), isolating the speed relaxation, without
+        /// disturbing the aerodynamics. The length has to be neutralised in the polar
+        /// too: tether drag is proportional to LineLength, so a 1e9 m line would drive
+        /// the glide ratio to zero and the kite would relax to a standstill. Fold the
+        /// real tether drag into ResidualDrag, then switch the length-dependent term
+        /// off, which leaves GlideRatio bit-for-bit unchanged.
+        /// </summary>
+        private static void FreezeInPlace(WindowSim sim)
+        {
+            WindowConfiguration config = sim.Config;
+            double before = config.GlideRatio;
+
+            config.ResidualDrag += 0.25 * config.LineDragCoefficient * 2.0
+                                   * config.LineDiameter * config.LineLength / config.SailArea;
+            config.LineDragCoefficient = 0.0;
+            config.LineLength = 1e9;
+
+            Assert.AreEqual(before, config.GlideRatio, 1e-12,
+                "freezing the kite must not change how well it glides");
+        }
+
         private static void Run(WindowSim sim, WindowKiteState state, double seconds,
             double handLeft = 0.0, double handRight = 0.0, double walk = 0.0)
         {
@@ -36,12 +59,53 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void GlideRatio_ComesFromThePolarPlusParasiticDrag()
+        public void GlideRatio_CorrectsThePolarForAFiniteWingAndAddsTheMissingDrag()
         {
             var config = new WindowConfiguration();
-            var (cl, cd) = AeroPolar.Evaluate(config.TrimAngleOfAttack);
-            Assert.AreEqual(cl / (cd + config.ParasiticDrag), config.GlideRatio, 1e-12);
-            Assert.AreEqual(6.04, config.GlideRatio, 0.05);
+            var (clInfinite, cdProfile) = AeroPolar.Evaluate(config.TrimAngleOfAttack);
+
+            // AeroPolar is thin-airfoil theory for an infinite span. Both corrections
+            // below are textbook lifting-line results; see WindowConfiguration.
+            double denominator = MathD.PI * config.OswaldEfficiency * config.AspectRatio;
+            double cl = clInfinite / (1.0 + (2.0 * MathD.PI) / denominator);
+            double cdInduced = cl * cl / denominator;
+            double cdTether = 0.25 * config.LineDragCoefficient * 2.0
+                              * config.LineDiameter * config.LineLength / config.SailArea;
+            double cd = cdProfile + cdInduced + cdTether + config.ResidualDrag;
+
+            Assert.AreEqual(cl / cd, config.GlideRatio, 1e-12);
+
+            // The finite wing loses lift and gains induced drag, so the glide ratio
+            // has to come out below the infinite-span figure, not above it.
+            Assert.Less(config.GlideRatio, clInfinite / cdProfile);
+            Assert.AreEqual(4.39, config.GlideRatio, 0.05);
+        }
+
+        [Test]
+        public void GlideRatio_FallsAsTheOneFreeDragTermRises()
+        {
+            // ResidualDrag is the only un-derived number left in the glide ratio, and
+            // it is the knob for re-calibrating against a real kite. Pin its range so
+            // a change to the derivation cannot silently move the whole envelope.
+            var config = new WindowConfiguration();
+
+            config.ResidualDrag = 0.0;
+            Assert.AreEqual(6.05, config.GlideRatio, 0.02);
+
+            config.ResidualDrag = 0.08;
+            Assert.AreEqual(3.44, config.GlideRatio, 0.02);
+        }
+
+        [Test]
+        public void GlideRatio_FallsAsTheLinesGetLonger()
+        {
+            // Tether drag is the one term that grows with line length, so a kite on
+            // longer lines must glide worse. Nothing else in the config depends on it.
+            var config = new WindowConfiguration { LineLength = 25.0 };
+            double onShortLines = config.GlideRatio;
+
+            config.LineLength = 45.0;
+            Assert.Less(config.GlideRatio, onShortLines);
         }
 
         [Test]
@@ -50,19 +114,23 @@ namespace Kitesim.Core.Tests
             var sim = MakeSim(5.0);
             var state = Flying(Vec3.Forward, Vec3.Up, 0.0);
 
-            // Freeze the kite in place so only the speed relaxation is exercised.
-            sim.Config.LineLength = 1e9;
+            FreezeInPlace(sim);
             Run(sim, state, 5.0);
 
             Assert.AreEqual(5.0 * sim.Config.GlideRatio, state.Speed, 0.5);
-            Assert.That(state.Speed, Is.InRange(25.0, 35.0));
+
+            // The old bound here was 25-35 m/s, justified in the config by "50-80
+            // km/h commonly quoted for sport kites" -- but 30 m/s is 108 km/h, so the
+            // bound contradicted its own stated source. 16.7-25.0 m/s is that source
+            // converted honestly: 60-90 km/h. See docs/kite-anatomy.md section 4.
+            Assert.That(state.Speed, Is.InRange(16.7, 25.0));
         }
 
         [Test]
         public void AtWindowEdge_SpeedFallsToThePowerFloor()
         {
             var sim = MakeSim(5.0);
-            sim.Config.LineLength = 1e9;
+            FreezeInPlace(sim);
             // Directly crosswind at ground level: theta = 90 degrees.
             var state = Flying(new Vec3(1, 0, 0), Vec3.Up, 30.0);
 
@@ -275,18 +343,30 @@ namespace Kitesim.Core.Tests
             // TheNoseDownLandsIt, with neutral hands, and confirm each one escapes
             // the boundary rather than sitting on it forever.
             //
-            // Measured (6 m/s wind, Speed starts at the floor-driven 1.8118 m/s,
+            // Measured (6 m/s wind, Speed starting at the floor-driven equilibrium,
             // heading toward the local zenith): none of these get stuck. All land
-            // within 40-75 s by sliding along the edge, elevation dropping under the
-            // gravity turn, until Direction.Y crosses zero -- because at the edge
-            // the power floor keeps Speed nonzero (1.8118 m/s) and the gravity term
-            // keeps rotating the heading, so sigma = Speed*dt/LineLength is never
-            // zero and the state keeps changing.
+            // within 57-90 s, and the escape is pure geometry, not the weight term.
+            // The zenith lies on the edge circle (it is perpendicular to the
+            // horizontal window centre), so the meridian a kite released nose-up
+            // follows IS the edge circle: it slides along the boundary, over the top
+            // and down the far side until Direction.Y crosses zero. The power floor
+            // is what makes that possible -- it keeps Speed nonzero at the edge, so
+            // sigma = Speed*dt/LineLength never reaches zero and the state keeps
+            // changing.
+            //
+            // The weight term contributes nothing here: at the release orientation
+            // its turn rate is Dot((0,-c,0), Cross(Heading, Direction)) / v, and a
+            // nose-up heading makes that cross product horizontal, so the dot product
+            // is exactly zero. Measured to confirm -- the escape times below are
+            // identical to the digit at WeightTurnCoefficient 1.0, 2.0, 3.0 and
+            // 9.80665. What does move them is the glide ratio, through Speed: these
+            // budgets are set for the calibrated E of about 4.39 and were 40-75 s at
+            // the old, roughly 40 percent faster E of 6.04.
             (double betaDeg, double phiDeg, double maxSeconds)[] cases =
             {
-                (30.0, 100.0, 75.0),
-                (50.0, 150.0, 75.0),
-                (10.0, 179.0, 75.0),
+                (30.0, 100.0, 120.0),
+                (50.0, 150.0, 120.0),
+                (10.0, 179.0, 120.0),
             };
 
             foreach (var (betaDeg, phiDeg, maxSeconds) in cases)
@@ -305,7 +385,7 @@ namespace Kitesim.Core.Tests
                 {
                     Direction = direction,
                     Heading = KiteStateView.TangentUp(direction),
-                    Speed = 1.8118,
+                    Speed = sim.Config.GlideRatio * sim.Config.PowerFloor * 6.0,
                     Landed = false
                 };
 
@@ -374,7 +454,7 @@ namespace Kitesim.Core.Tests
             double theta = MathD.Acos(MathD.Clamp(Vec3.Dot(state.Direction, center), -1.0, 1.0)) * MathD.Rad2Deg;
             Assert.That(theta, Is.InRange(85.0, 95.0),
                 "a parked kite's angular distance from the window centre must stay near the 90-degree edge");
-            Assert.AreEqual(1.8118, state.Speed, 0.01,
+            Assert.AreEqual(sim.Config.GlideRatio * sim.Config.PowerFloor * 6.0, state.Speed, 0.01,
                 "a parked kite settles to the power floor's driving speed, not to zero -- it must stay steerable");
         }
 
@@ -446,7 +526,7 @@ namespace Kitesim.Core.Tests
             // steering the nose down, matching how a pilot would find the kite
             // already parked and then act.
             Run(sim, state, 5.0);
-            Assert.AreEqual(1.8118, state.Speed, 0.01,
+            Assert.AreEqual(sim.Config.GlideRatio * sim.Config.PowerFloor * 6.0, state.Speed, 0.01,
                 "the parked, floor-driven speed at the edge, measured for this exact start");
 
             int steps = (int)(30.0 / Dt);
@@ -470,8 +550,8 @@ namespace Kitesim.Core.Tests
 
             Run(sim, state, 3.0);
 
-            // Gravity cannot turn a kite that is flying straight up, so it climbs
-            // along the meridian and the azimuth stays at zero.
+            // The weight term cannot turn a kite that is flying straight up, so it
+            // climbs along the meridian and the azimuth stays at zero.
             Assert.Greater(sim.View(state).ElevationRad, 60.0 * MathD.Deg2Rad);
             Assert.AreEqual(0.0, sim.View(state).AzimuthRad, 1e-9);
         }
@@ -610,7 +690,7 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void GravityDoesNotTurnAKiteFlyingStraightUp()
+        public void TheWeightTermDoesNotTurnAKiteFlyingStraightUp()
         {
             var sim = MakeSim(6.0);
             var state = Flying(Vec3.Forward, Vec3.Up, 25.0);
@@ -619,7 +699,7 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void GravityDroopsAKiteFlyingAcrossTheWindow()
+        public void TheWeightTermDroopsAKiteFlyingAcrossTheWindow()
         {
             var sim = MakeSim(6.0);
             // Flying toward the pilot's right at the window centre.
@@ -629,11 +709,11 @@ namespace Kitesim.Core.Tests
 
             // Positive rate turns the heading from "right" on toward "down".
             Assert.Greater(rate, 0.0);
-            Assert.AreEqual(9.80665 / 25.0, rate, 1e-9);
+            Assert.AreEqual(sim.Config.WeightTurnCoefficient / 25.0, rate, 1e-9);
         }
 
         [Test]
-        public void GravityTermMatchesTheClosedFormOfTheOracleLaw()
+        public void TheWeightTermMatchesTheClosedFormOfTheOracleLaw()
         {
             var sim = MakeSim(6.0);
             double beta = 40.0 * MathD.Deg2Rad;
@@ -645,7 +725,8 @@ namespace Kitesim.Core.Tests
                            + KiteStateView.TangentRight(direction) * MathD.Sin(psi);
             var state = Flying(direction, heading, speed);
 
-            double expected = 9.80665 * MathD.Cos(beta) * MathD.Sin(psi) / speed;
+            double expected = sim.Config.WeightTurnCoefficient
+                              * MathD.Cos(beta) * MathD.Sin(psi) / speed;
             Assert.AreEqual(expected, sim.TurnRate(state, 0.0, 0.0), 1e-9);
         }
 
@@ -733,13 +814,11 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void TheGravityTurnDominatesWhenTheKiteIsSlow()
+        public void TheWeightTurnGrowsAsTheKiteSlowsDown()
         {
-            // This is the mechanism by which a kite drops out of the sky in light
-            // wind: the gravity turn goes as 1/v, so a slow kite flying across the
-            // window is whipped toward the ground within a second, while a fast one
-            // barely droops. Asserted on the rate itself, which is exact, rather
-            // than on an integrated trajectory.
+            // The weight term goes as 1/v, so a slow kite droops far harder than a
+            // fast one. Asserted on the rate itself, which is exact, rather than on
+            // an integrated trajectory.
             var sim = MakeSim(5.0);
             var slow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 6.0);
             var fast = Flying(Vec3.Forward, new Vec3(1, 0, 0), 30.0);
@@ -747,10 +826,30 @@ namespace Kitesim.Core.Tests
             double slowRate = sim.TurnRate(slow, 0.0, 0.0);
             double fastRate = sim.TurnRate(fast, 0.0, 0.0);
 
-            Assert.AreEqual(9.80665 / 6.0, slowRate, 1e-9);
-            Assert.Greater(slowRate, fastRate * 4.0);
-            Assert.Greater(slowRate, 1.5,
-                "over a radian per second: the kite droops to the ground within a second");
+            Assert.AreEqual(sim.Config.WeightTurnCoefficient / 6.0, slowRate, 1e-9);
+            Assert.AreEqual(5.0, slowRate / fastRate, 1e-9, "the term goes exactly as 1/v");
+        }
+
+        [Test]
+        public void TheWeightTurnNeverOutweighsTheSteeringEvenAtTheSlowestTheKiteGets()
+        {
+            // The defect this bound exists to prevent. Steering authority goes as v
+            // and the weight term as 1/v, so their ratio goes as 1/v^2 and is worst
+            // where the kite is slowest -- the window edge and light wind, which is
+            // exactly where the owner reported the kite unflyable and the edge
+            // inescapable. With the coefficient hard-coded to g the ratio at the
+            // MinAirspeed floor was 4.90: full deflection could not undo what weight
+            // was doing, so no input got the kite out. Anything at or above 1.0 is a
+            // trap the pilot cannot steer out of.
+            var config = new WindowConfiguration();
+            double floor = config.MinAirspeed;
+
+            double weight = config.WeightTurnCoefficient / floor;
+            double steering = config.SteeringGain * floor;
+
+            Assert.Less(weight / steering, 0.75,
+                "at the slowest the model lets the kite get, full steering must still "
+                + "clearly beat the weight term, or the window edge is a one-way trap");
         }
 
         [Test]
@@ -761,8 +860,8 @@ namespace Kitesim.Core.Tests
             var passiveKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
             var activeKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
 
-            passive.Config.LineLength = 1e9;
-            active.Config.LineLength = 1e9;
+            FreezeInPlace(passive);
+            FreezeInPlace(active);
 
             Run(passive, passiveKite, 5.0);
             Run(active, activeKite, 5.0, walk: -1.0);

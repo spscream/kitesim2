@@ -30,3 +30,4 @@ UIElementsSchema/
 # Local verification harness
 .verify-core/bin/
 .verify-core/obj/
+.calib/
