@@ -554,8 +554,8 @@ namespace Kitesim.Core.Tests
             double rate = sim.TurnRate(state, 0.0, 0.0);
 
             Vec3 turnNormal = Vec3.Cross(state.Heading, state.Direction);
-            double expected = Vec3.Dot(new Vec3(0.0, -sim.Config.WeightTurnCoefficient, 0.0), turnNormal)
-                / MathD.Max(state.Speed, sim.Config.MinAirspeed);
+            double airspeed = MathD.Max(state.Speed, sim.Config.MinAirspeed);
+            double expected = Vec3.Dot(new Vec3(0.0, -sim.WeightTurn(airspeed), 0.0), turnNormal) / airspeed;
 
             Assert.AreEqual(expected, rate, 1e-12);
         }

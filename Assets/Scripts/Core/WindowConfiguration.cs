@@ -96,15 +96,21 @@ namespace Kitesim.Core
         public double ResidualDrag = 0.04;
 
         /// <summary>
-        /// Coefficient of the weight term in TurnRate, m/s^2. In the closed form
-        /// c * cos(beta) * sin(psi) / v this was originally hard-coded to g, on the
-        /// assumption of an unpowered point mass constrained to a sphere. A real
-        /// kite is not unpowered: part of its lift lies in the tangent plane and
-        /// works against the weight, and its bridle trim resists the nose dropping.
-        /// The literature this law comes from (Erhard &amp; Strauch; Fechner et al.,
-        /// see docs/kite-anatomy.md section 5) treats this constant as fitted per
-        /// kite, and it can be negative -- a kite with a negative constant drifts
-        /// toward the zenith rather than the ground.
+        /// The whole of gravity, m/s^2, of which the weight term uses only the part
+        /// the wing is not carrying: see WindowSim.WeightTurn, where the attenuation
+        /// by lift is derived. This is no longer a fitted number -- it is g, and the
+        /// fitting has moved into a law.
+        ///
+        /// The history is worth keeping. It began hard-coded to g on the assumption
+        /// of an unpowered point mass on a sphere, which made the kite unflyable in
+        /// light wind; it was then fitted down to 1.0, following the literature this
+        /// law comes from (Erhard &amp; Strauch; Fechner et al., see
+        /// docs/kite-anatomy.md section 5), which treats the constant as fitted per
+        /// kite. A flat constant is wrong in the same way at both ends, though: it
+        /// bends the path of a fast kite that should be tracking straight, and the
+        /// owner flew exactly that -- a kite sagging toward the ground on a level
+        /// pass from edge to edge, where a real one holds the line as if on rails and
+        /// only sags when a line is rigged long.
         ///
         /// The quantity that decides this value is the ratio of the weight turn rate
         /// to the turn rate of full steering deflection. Steering goes as v and the
@@ -133,7 +139,7 @@ namespace Kitesim.Core
         /// straight line on a sphere descends away from its apex; that residual is
         /// geometry, not a defect, and is not the target).
         /// </summary>
-        public double WeightTurnCoefficient = 1.0;
+        public double WeightTurnCoefficient = 9.81;
 
         /// <summary>
         /// Along-track gravity in the speed law, m/s^2. See the comment at its use in

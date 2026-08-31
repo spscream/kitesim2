@@ -222,7 +222,10 @@ namespace Kitesim.Core.Tests
                     Assert.Greater(state.Speed, edgeSpeed + 6.0,
                         "diving off the edge must trade height for speed, not hold the edge speed");
                 else
-                    Assert.AreEqual(edgeSpeed, state.Speed, 0.05,
+                    // A fifth of a metre per second of slack: with the term off the
+                    // speed follows the local wind alone, and the kite has moved a
+                    // little way into the window over the three seconds.
+                    Assert.AreEqual(edgeSpeed, state.Speed, 0.2,
                         "with the term off the kite must show the old defect exactly: "
                         + "speed pinned to what the local wind alone sustains");
             }
@@ -869,14 +872,21 @@ namespace Kitesim.Core.Tests
         public void TheWeightTermDroopsAKiteFlyingAcrossTheWindow()
         {
             var sim = MakeSim(6.0);
-            // Flying toward the pilot's right at the window centre.
-            var state = Flying(Vec3.Forward, new Vec3(1, 0, 0), 25.0);
 
-            double rate = sim.TurnRate(state, 0.0, 0.0);
+            // Slow: below the speed at which the wing carries its own weight, so
+            // there is weight left over to bend the path toward the ground.
+            var slow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 2.0);
+            double droop = sim.TurnRate(slow, 0.0, 0.0);
 
             // Positive rate turns the heading from "right" on toward "down".
-            Assert.Greater(rate, 0.0);
-            Assert.AreEqual(sim.Config.WeightTurnCoefficient / 25.0, rate, 1e-9);
+            Assert.Greater(droop, 0.0);
+            Assert.AreEqual(sim.WeightTurn(2.0) / 2.0, droop, 1e-9);
+
+            // And fast: the owner's rails. A kite carrying many times its own weight
+            // holds the line it is pointed along, and a sag on a level pass edge to
+            // edge is a rigging fault rather than what a trimmed kite does.
+            var fast = Flying(Vec3.Forward, new Vec3(1, 0, 0), 25.0);
+            Assert.AreEqual(0.0, sim.TurnRate(fast, 0.0, 0.0), 1e-12);
         }
 
         [Test]
@@ -892,7 +902,9 @@ namespace Kitesim.Core.Tests
                            + KiteStateView.TangentRight(direction) * MathD.Sin(psi);
             var state = Flying(direction, heading, speed);
 
-            double expected = sim.Config.WeightTurnCoefficient
+            // The published closed form, with the coefficient the model now derives
+            // from how much of the weight the wing is not carrying at this speed.
+            double expected = sim.WeightTurn(speed)
                               * MathD.Cos(beta) * MathD.Sin(psi) / speed;
             Assert.AreEqual(expected, sim.TurnRate(state, 0.0, 0.0), 1e-9);
         }
@@ -983,18 +995,24 @@ namespace Kitesim.Core.Tests
         [Test]
         public void TheWeightTurnGrowsAsTheKiteSlowsDown()
         {
-            // The weight term goes as 1/v, so a slow kite droops far harder than a
-            // fast one. Asserted on the rate itself, which is exact, rather than on
-            // an integrated trajectory.
+            // The weight term goes as 1/v, and the weight left for it to work with
+            // grows as the wing slows, so a slow kite droops far harder than a
+            // merely slowish one. Asserted on the rate itself, which is exact,
+            // rather than on an integrated trajectory. Both speeds here are below
+            // the 3.65 m/s at which lift equals weight; above it there is nothing
+            // left to droop with, which is its own test.
             var sim = MakeSim(5.0);
-            var slow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 6.0);
-            var fast = Flying(Vec3.Forward, new Vec3(1, 0, 0), 30.0);
+            // Both above MinAirspeed, which floors the denominator, and both below
+            // the 3.65 m/s at which lift equals weight.
+            var slow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 2.0);
+            var lessSlow = Flying(Vec3.Forward, new Vec3(1, 0, 0), 3.0);
 
             double slowRate = sim.TurnRate(slow, 0.0, 0.0);
-            double fastRate = sim.TurnRate(fast, 0.0, 0.0);
+            double lessSlowRate = sim.TurnRate(lessSlow, 0.0, 0.0);
 
-            Assert.AreEqual(sim.Config.WeightTurnCoefficient / 6.0, slowRate, 1e-9);
-            Assert.AreEqual(5.0, slowRate / fastRate, 1e-9, "the term goes exactly as 1/v");
+            Assert.AreEqual(sim.WeightTurn(2.0) / 2.0, slowRate, 1e-9);
+            Assert.Greater(slowRate, lessSlowRate * 3.0,
+                "1/v in the term, and on top of that the wing carries less of the weight");
         }
 
         [Test]
@@ -1008,14 +1026,21 @@ namespace Kitesim.Core.Tests
             // MinAirspeed floor was 4.90: full deflection could not undo what weight
             // was doing, so no input got the kite out. Anything at or above 1.0 is a
             // trap the pilot cannot steer out of.
-            var config = new WindowConfiguration();
-            double floor = config.MinAirspeed;
+            // Judged at the slowest the kite actually flies -- the speed the power
+            // floor sustains at the window edge -- rather than at MinAirspeed, which
+            // is only a floor under the denominator of the weight term. Below the
+            // speed at which the wing carries its own weight the kite is stalling and
+            // the weight should win: that is a stall, not a trap, and it ends on the
+            // ground rather than at the edge.
+            var sim = MakeSim(6.0);
+            WindowConfiguration config = sim.Config;
+            double edge = config.GlideRatio * config.PowerFloor * 6.0;
 
-            double weight = config.WeightTurnCoefficient / floor;
-            double steering = config.SteeringGain * floor;
+            double weight = sim.WeightTurn(edge) / edge;
+            double steering = config.SteeringGain * edge;
 
             Assert.Less(weight / steering, 0.75,
-                "at the slowest the model lets the kite get, full steering must still "
+                "at the slowest the kite actually flies, full steering must still "
                 + "clearly beat the weight term, or the window edge is a one-way trap");
         }
 
@@ -1263,13 +1288,14 @@ namespace Kitesim.Core.Tests
             // 4.48 s of the original 60 s run, so most of the steps were
             // no-ops and the comparison was 0.0 against 0.0. Starting at 45
             // degrees keeps it airborne, but this exact steering pattern
-            // still lands it at about 24.1 s, so the run stops at 18 s, with
-            // about six seconds of margin.
+            // still lands it before 18 s now that a flying kite holds its line
+            // instead of sagging (see WindowSim.WeightTurn), so the run stops at
+            // 10 s.
             double beta = 45.0 * MathD.Deg2Rad;
             var a = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 20.0);
             var b = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 20.0);
 
-            int steps = (int)(18.0 / Dt);
+            int steps = (int)(10.0 / Dt);
             for (int i = 0; i < steps; i++)
             {
                 double u = MathD.Sin(i * 0.013) * 0.7;

@@ -201,6 +201,40 @@ namespace Kitesim.Core
         /// position, not an assumed-horizontal wind, is what the sim actually tracks.
         /// </summary>
         /// <summary>
+        /// How much of gravity is left to bend the flight path, m/s^2.
+        ///
+        /// A wing that is carrying more than its own weight flies where it points.
+        /// The owner, flying: hold the hands together and a real kite tracks edge to
+        /// edge as if on rails, and a kite that sags across the window is a kite with
+        /// one line longer than the other -- a rigging fault, not what a trimmed one
+        /// does. Ours sagged because the weight term was a constant, so it kept
+        /// bending the path however fast the kite was going.
+        ///
+        /// What is left over is the weight the lift does not carry:
+        ///
+        ///     c = g * max(0, 1 - L / (m * g)),   L = 0.5 * rho * A * cl * v^2
+        ///
+        /// so it is zero while the kite is flying properly and reaches g only when
+        /// the wing has stopped working. The crossover -- lift exactly equal to
+        /// weight -- falls at 3.65 m/s for this kite, which is within a hair of the
+        /// 3.7 m/s the power floor leaves at the window edge. The model therefore
+        /// says: a kite holds its line while it flies, and starts to fall exactly as
+        /// it slows to the least speed at which it can fly. Both halves are what the
+        /// owner reports.
+        /// </summary>
+        public double WeightTurn(double airspeed)
+        {
+            var (cl, _) = Config.FiniteWingAero();
+
+            double lift = 0.5 * Config.AirDensity * Config.SailArea * cl * airspeed * airspeed;
+            double weight = Config.Mass * Config.WeightTurnCoefficient;
+            if (weight <= 0.0)
+                return 0.0;
+
+            return Config.WeightTurnCoefficient * MathD.Clamp01(1.0 - lift / weight);
+        }
+
+        /// <summary>
         /// How long the speed takes to answer a change, seconds. Derived from the
         /// air the kite is moving through rather than fixed, which is the difference
         /// between a kite and a first-order filter.
@@ -292,7 +326,7 @@ namespace Kitesim.Core
 
             // Unit tangent 90 degrees from the heading toward increasing psi.
             Vec3 turnNormal = Vec3.Cross(state.Heading, state.Direction);
-            Vec3 weight = new Vec3(0.0, -Config.WeightTurnCoefficient, 0.0);
+            Vec3 weight = new Vec3(0.0, -WeightTurn(airspeed), 0.0);
             double weightTurn = Vec3.Dot(weight, turnNormal) / airspeed;
 
             // The steering help lives here, inside the model, rather than in the
