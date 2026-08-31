@@ -5,7 +5,9 @@ namespace Kitesim.Core
     /// radius LineLength around the pilot's hands, carrying a heading in the local
     /// tangent plane. Speed relaxes toward the quasi-steady crosswind speed;
     /// heading turns at a rate set by the steering law plus gravity; position
-    /// advances along a great circle, which parallel-transports the heading.
+    /// advances along a great circle, which parallel-transports the heading. Step
+    /// also clamps the kite to the downwind hemisphere (theta &lt;= 90 degrees) --
+    /// see the comment in Step for why that boundary exists.
     ///
     /// This model assumes the kite always flies nose-first like a wing. It does not
     /// reproduce stalls, slack lines, hovering or trick moves. Launching and landing
@@ -75,6 +77,31 @@ namespace Kitesim.Core
 
             state.Direction = nextDirection.Normalized();
             state.Heading = Orthonormalize(nextHeading, state.Direction);
+
+            // Keep the kite inside the downwind hemisphere. The window edge (theta =
+            // 90 degrees) is the great circle where Direction is perpendicular to the
+            // wind centre, i.e. Dot(Direction, center) == 0; downwind of it that dot
+            // is positive, upwind it is negative. The lines cannot drive a kite
+            // upwind of that edge: past it EffectiveWind goes negative, the Speed
+            // clamp above pins Speed at exactly zero, and because sigma =
+            // Speed*dt/LineLength is then also exactly zero, nothing in the state can
+            // ever change again -- measured, a kite left with neutral hands freezes
+            // for good within 1.74-4.52 s from ordinary starting elevations (15-75
+            // degrees, 6 m/s wind). Project any excursion back onto the edge instead
+            // of letting it cross: at the edge itself the power floor still applies
+            // (EffectiveWind's ">= 0" branch), so Speed stays nonzero and the kite
+            // keeps moving -- either sliding along the edge or turning back into the
+            // window under the gravity term -- rather than freezing. This does not
+            // touch the legitimate parked state at theta == 90 exactly (see
+            // KiteLeftAlone_DriftsToAndParksAtTheWindowEdge and
+            // ParkedAtTheEdge_SteeringTheNoseDownLandsIt): those already sit on this
+            // boundary and are unaffected by a clamp that only fires strictly past it.
+            Vec3 center = WindowChart.Center(Wind);
+            if (Vec3.Dot(state.Direction, center) < 0.0)
+            {
+                state.Direction = ProjectOntoEdge(state.Direction, center);
+                state.Heading = Orthonormalize(state.Heading, state.Direction);
+            }
 
             if (state.Direction.Y < 0.0)
                 Land(state);
@@ -209,6 +236,19 @@ namespace Kitesim.Core
             Vec3 corrected = heading - direction * Vec3.Dot(heading, direction);
             if (corrected.SqrLength < 1e-12)
                 return KiteStateView.TangentUp(direction);
+            return corrected.Normalized();
+        }
+
+        /// <summary>
+        /// Removes the component of direction along center and renormalises, landing
+        /// exactly on the theta = 90 degree circle (Dot(result, center) == 0). Used to
+        /// pull a direction that has gone upwind of the window edge back onto it.
+        /// </summary>
+        private static Vec3 ProjectOntoEdge(Vec3 direction, Vec3 center)
+        {
+            Vec3 corrected = direction - center * Vec3.Dot(direction, center);
+            if (corrected.SqrLength < 1e-12)
+                return Vec3.Cross(Vec3.Up, center).Normalized();
             return corrected.Normalized();
         }
 

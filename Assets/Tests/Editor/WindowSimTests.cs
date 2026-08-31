@@ -149,33 +149,35 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void KiteDrivenPastTheWindowEdge_ParksRatherThanReachingTheUpwindHorizon()
+        public void KiteDrivenPastTheWindowEdge_IsClampedBackAndRecovers()
         {
-            // Measured consequence of the unconditional floor (before the fix that
-            // restricted it to the downwind hemisphere): from this exact start, the
-            // kite drifts on past theta = 90 degrees, holds a constant floor-driven
-            // speed, and is still climbing through theta = 105.8 degrees at t = 35 s
-            // -- headed for the upwind horizon at theta = 180, which the M3.3
-            // half-disc renderer cannot draw. Excluding the floor upwind stops that
-            // runaway.
+            // This test used to be KiteDrivenPastTheWindowEdge_ParksRatherThanReaching
+            // TheUpwindHorizon, and documented (correctly, at the time) that from this
+            // exact start the kite loses its driving wind, decelerates to exactly
+            // zero, and parks motionless in the air at theta = 99.4 degrees forever --
+            // state (ii) from the fix brief: alive in the sense of not climbing
+            // further, but Speed == 0 makes it just as frozen as any other point past
+            // the edge, since sigma = Speed*dt/LineLength is then also exactly zero.
             //
-            // This test used to assert the kite lands. It doesn't anymore, and that
-            // is correct, not a regression: it used to reach the ground because a
-            // negative EffectiveWind pulled Speed negative, and negative Speed
-            // advanced the kite backwards along its heading, back down into the
-            // ground -- i.e. the very reverse-flight bug fixed by the Speed clamp
-            // in Step. With that bug fixed, the kite instead loses its driving wind,
-            // decelerates to zero, and parks in the air at theta = 99.4 degrees,
-            // motionless, exactly where KiteLeftAlone_DriftsToAndParksAtTheWindowEdge
-            // says a kite with no driving wind should be. Measured over 60 s (3000 steps):
-            // Speed reaches exactly 0.0 and theta stays pinned at 99.419 degrees
-            // for the rest of the run, never landing and never climbing further.
+            // The hemisphere clamp in Step removes that state entirely, and this is
+            // also the fix brief's required boundary-trap check: does clamping create
+            // a *new* absorbing state pressed against theta = 90? Measured from this
+            // same start (beta = 20 degrees, phi = 100.6 degrees, theta0 = 99.95
+            // degrees, already past the edge, neutral hands): the very first Step
+            // call snaps Direction back onto theta = 90.000000 exactly (the clamp
+            // fires on the great-circle advance computed from the invalid starting
+            // direction, same as it would on any in-sim excursion). Speed does not
+            // drop to zero there -- the power floor applies exactly at the edge, so
+            // Speed only relaxes from 25 m/s toward the floor-driven target (measured
+            // 23.44 m/s after step 0) -- and the nonzero gravity turn (this start is
+            // off the psi = 0 meridian, deliberately) rotates the heading enough that
+            // theta is already measurably back inside the window (89.96 degrees) by
+            // the very next step. The kite goes on to land normally at t = 13.56 s
+            // (measured), never re-crossing theta = 90 again after step 0. No trap:
+            // the boundary is not sticky.
             var sim = MakeSim(6.0);
             Vec3 center = WindowChart.Center(sim.Wind);
 
-            // beta = 20 degrees of elevation, phi = 100.6 degrees of azimuth: already
-            // just past the theta = 90 edge (theta0 = 99.95 degrees), off the exact
-            // meridian so the gravity term is not neutralised the way it is at psi = 0.
             double beta = 20.0 * MathD.Deg2Rad;
             double phi = 100.6 * MathD.Deg2Rad;
             Vec3 direction = new Vec3(
@@ -194,7 +196,12 @@ namespace Kitesim.Core.Tests
                 Landed = false
             };
 
-            double maxTheta = theta0;
+            // theta0 itself is the deliberately-invalid past-the-edge start, before
+            // Step has had a chance to run the clamp at all; maxTheta tracks the
+            // clamp's effect from the first Step call onward, not that starting
+            // excursion.
+            double maxTheta = 0.0;
+            // Generous relative to the measured 13.56 s landing time.
             int steps = (int)(60.0 / Dt);
             for (int i = 0; i < steps; i++)
             {
@@ -205,12 +212,121 @@ namespace Kitesim.Core.Tests
                     break;
             }
 
-            Assert.IsFalse(state.Landed,
-                "a kite that has lost its driving wind upwind of the pilot parks in the air, it does not touch down");
-            Assert.AreEqual(0.0, state.Speed, 1e-9,
-                "with no driving wind and no reverse flight, Speed settles to exactly zero");
-            Assert.Less(maxTheta, 110.0,
-                "the kite must not keep climbing toward the upwind horizon at theta = 180");
+            Assert.IsTrue(state.Landed,
+                "released past the edge with neutral hands, the kite must recover into the window and eventually land, not park forever past the edge");
+            Assert.AreEqual(0.0, state.Speed, 1e-12, "a landed kite has zero speed");
+            Assert.Less(maxTheta, 90.0 + 1e-6,
+                "after the first Step call, the clamp must keep the kite inside the downwind hemisphere for the rest of the run");
+        }
+
+        [Test]
+        public void KiteLeftAlone_FromSeveralElevations_StaysInsideTheWindowAndDoesNotFreeze()
+        {
+            // Before the hemisphere clamp in Step, a kite left with neutral hands
+            // crossed the window edge and froze permanently (Speed pinned at exactly
+            // 0.0, so sigma = Speed*dt/LineLength is also exactly zero and nothing in
+            // the state can change again): measured at 4.52 s from 15 degrees
+            // elevation, 4.20 s from 30, 3.82 s from 45, 3.22 s from 60, 1.74 s from
+            // 75 (6 m/s wind). This test locks in both halves of the fix: the kite
+            // never leaves the downwind hemisphere, and it never ends up in that
+            // frozen state -- it settles into the legitimate parked-at-the-edge
+            // state instead (see KiteLeftAlone_DriftsToAndParksAtTheWindowEdge and
+            // ParkedAtTheEdge_SteeringTheNoseDownLandsIt), which is alive and
+            // steerable, not landed but also not stuck.
+            //
+            // Measured over 120 s (well past every one of the pre-fix freeze times
+            // above) for all five elevations: theta caps at exactly 90.000000
+            // degrees -- never exceeds it -- and every one of them is airborne with
+            // Speed == 1.811800 m/s (the same floor-driven speed as the other
+            // parking tests) at the end of the run, i.e. steerable, not frozen.
+            double[] elevationsDeg = { 15.0, 30.0, 45.0, 60.0, 75.0 };
+            foreach (var elevationDeg in elevationsDeg)
+            {
+                var sim = MakeSim(6.0);
+                Vec3 center = WindowChart.Center(sim.Wind);
+                double beta = elevationDeg * MathD.Deg2Rad;
+                var state = Flying(new Vec3(0.0, MathD.Sin(beta), MathD.Cos(beta)), Vec3.Up, 25.0);
+
+                int steps = (int)(120.0 / Dt);
+                for (int i = 0; i < steps; i++)
+                {
+                    sim.Step(state, Dt, 0.0, 0.0, 0.0);
+                    double theta = MathD.Acos(MathD.Clamp(Vec3.Dot(state.Direction, center), -1.0, 1.0)) * MathD.Rad2Deg;
+                    Assert.Less(theta, 90.0 + 1e-6,
+                        $"elevation {elevationDeg}: the kite must never leave the downwind hemisphere (step {i})");
+                    if (state.Landed)
+                        break;
+                }
+
+                Assert.IsTrue(state.Landed || state.Speed > 0.0,
+                    $"elevation {elevationDeg}: after 120 s the kite must either have landed or still be moving (steerable), not sit frozen with Speed == 0 while airborne");
+            }
+        }
+
+        [Test]
+        public void ReleasedExactlyOnTheEdge_TheBoundaryIsNotATrap()
+        {
+            // The fix brief's explicit boundary-trap check: the clamp could in
+            // principle create a *new* absorbing state by pinning a kite to
+            // theta = 90 forever. Verified by measurement, not assumed: release a
+            // kite sitting exactly on the edge circle (Dot(Direction, center) == 0,
+            // constructed the same way ProjectOntoEdge does) at points away from the
+            // fully symmetric phi = 90 meridian used by ParkedAtTheEdge_Steering
+            // TheNoseDownLandsIt, with neutral hands, and confirm each one escapes
+            // the boundary rather than sitting on it forever.
+            //
+            // Measured (6 m/s wind, Speed starts at the floor-driven 1.8118 m/s,
+            // heading toward the local zenith): none of these get stuck. All land
+            // within 40-75 s by sliding along the edge, elevation dropping under the
+            // gravity turn, until Direction.Y crosses zero -- because at the edge
+            // the power floor keeps Speed nonzero (1.8118 m/s) and the gravity term
+            // keeps rotating the heading, so sigma = Speed*dt/LineLength is never
+            // zero and the state keeps changing.
+            (double betaDeg, double phiDeg, double maxSeconds)[] cases =
+            {
+                (30.0, 100.0, 75.0),
+                (50.0, 150.0, 75.0),
+                (10.0, 179.0, 75.0),
+            };
+
+            foreach (var (betaDeg, phiDeg, maxSeconds) in cases)
+            {
+                var sim = MakeSim(6.0);
+                Vec3 center = WindowChart.Center(sim.Wind);
+                double beta = betaDeg * MathD.Deg2Rad;
+                double phi = phiDeg * MathD.Deg2Rad;
+                Vec3 raw = new Vec3(
+                    MathD.Cos(beta) * MathD.Sin(phi),
+                    MathD.Sin(beta),
+                    MathD.Cos(beta) * MathD.Cos(phi)).Normalized();
+                Vec3 direction = (raw - center * Vec3.Dot(raw, center)).Normalized();
+
+                var state = new WindowKiteState
+                {
+                    Direction = direction,
+                    Heading = KiteStateView.TangentUp(direction),
+                    Speed = 1.8118,
+                    Landed = false
+                };
+
+                bool escaped = false;
+                int steps = (int)(maxSeconds / Dt);
+                for (int i = 0; i < steps; i++)
+                {
+                    sim.Step(state, Dt, 0.0, 0.0, 0.0);
+                    double theta = MathD.Acos(MathD.Clamp(Vec3.Dot(state.Direction, center), -1.0, 1.0)) * MathD.Rad2Deg;
+                    Assert.Less(theta, 90.0 + 1e-6,
+                        $"beta={betaDeg} phi={phiDeg}: must stay inside the downwind hemisphere (step {i})");
+                    if (state.Landed || theta < 90.0 - 1e-6)
+                    {
+                        escaped = true;
+                        break;
+                    }
+                }
+
+                Assert.IsTrue(escaped,
+                    $"beta={betaDeg} phi={phiDeg}: a kite released exactly on the edge must eventually land or re-enter the window within {maxSeconds} s, not sit pinned to theta = 90 forever");
+            }
         }
 
         [Test]
@@ -223,14 +339,26 @@ namespace Kitesim.Core.Tests
             // a future change -- e.g. an along-track gravity term to make the kite
             // "fall out" of the edge -- cannot silently remove it.
             //
-            // Measured: a kite flying with zero steering input (gravity alone)
-            // from 45 degrees elevation drifts to theta = 90.725646 degrees and
-            // stops there. Checked over a 600 s run (30000 steps): both Direction
-            // and Speed are bit-identical from the moment it settles (around
-            // t = 50 s) to the end of the run -- a true fixed point, not a slow
-            // drift that happens to be small. That is because once Speed reaches
-            // exactly zero, Step's position update (sigma = Speed*dt/LineLength)
-            // is exactly zero too, so nothing about the state can change further.
+            // Before the hemisphere clamp in Step, this test's own comment was
+            // itself wrong about the settle time (claimed "around t = 50 s"): a
+            // kite flying with zero steering input from 45 degrees elevation
+            // actually drifted past the edge to theta = 90.725646 degrees and
+            // froze there by t = 3.84 s, with Speed pinned at exactly zero -- state
+            // (ii) from the fix brief, an absorbing bug, not a parked kite.
+            //
+            // With the clamp: measured over the same 600 s run (30000 steps), the
+            // kite is pulled back to exactly theta = 90 degrees and, in this
+            // particular symmetric case (heading stays in the x = 0 plane the
+            // whole way up, so the gravity turn term is identically zero
+            // throughout), settles precisely at the zenith, Direction ==
+            // (0, 1, 0), by t = 12.18 s (step 609). From there Direction and Speed
+            // are bit-identical to the end of the run -- a true fixed point, this
+            // time at the floor-driven speed (see EffectiveWind's power floor) of
+            // 1.8118002554 m/s, not the frozen Speed == 0 of the pre-clamp bug.
+            // The zenith is itself part of the theta = 90 edge (Dot(zenith,
+            // center) == 0 for any wind direction), so this is the same kind of
+            // flyable parked state as ParkedAtTheEdge_SteeringTheNoseDownLandsIt's
+            // start, not a new one.
             var sim = MakeSim(6.0);
             Vec3 center = WindowChart.Center(sim.Wind);
             double beta = 45.0 * MathD.Deg2Rad;
@@ -246,8 +374,8 @@ namespace Kitesim.Core.Tests
             double theta = MathD.Acos(MathD.Clamp(Vec3.Dot(state.Direction, center), -1.0, 1.0)) * MathD.Rad2Deg;
             Assert.That(theta, Is.InRange(85.0, 95.0),
                 "a parked kite's angular distance from the window centre must stay near the 90-degree edge");
-            Assert.AreEqual(0.0, state.Speed, 1e-9,
-                "a parked kite settles to near-zero speed and stays there, not drifting onwards");
+            Assert.AreEqual(1.8118, state.Speed, 0.01,
+                "a parked kite settles to the power floor's driving speed, not to zero -- it must stay steerable");
         }
 
         [Test]
@@ -272,14 +400,33 @@ namespace Kitesim.Core.Tests
             // KiteLeftAlone_DriftsToAndParksAtTheWindowEdge, where Speed sits at
             // exactly zero and the kite cannot move at all.
             //
-            // From there, holding handLeft = 0.2 (a moderate, sustained pull, well
-            // inside the 0.10-0.30 range measured to work -- 0.35 and above fails
-            // to land within 60 s) turns the nose from psi = 0 to psi around 177
-            // degrees (pointing at the ground, not exactly 180 because the
-            // constant steering input is balanced against the gravity term) within
-            // about 2 s, and holding it there measurably lands the kite: elevation
-            // descends from 40.7 degrees to 0 over 19.80 s, at a Speed that stays
-            // close to the measured 1.8118 m/s the entire way down.
+            // From there, holding handLeft = 0.2 (a moderate, sustained pull) turns
+            // the nose from psi = 0 to psi around 177 degrees (pointing at the
+            // ground, not exactly 180 because the constant steering input is
+            // balanced against the gravity term) within about 2 s, and holding it
+            // there measurably lands the kite: elevation descends from 40.7 degrees
+            // to 0 over 19.80 s, at a Speed that stays close to the measured
+            // 1.8118 m/s the entire way down.
+            //
+            // Working steering band, re-measured after the hemisphere clamp was
+            // added to Step: an earlier measurement of this same scenario (on the
+            // code before that clamp existed) found handLeft = 0.10-0.30 worked,
+            // 0.05 and 0.32 were the true edges of that, and 0.35 failed to land
+            // within 60 s. That failure mode no longer exists -- swept handLeft
+            // from 0.01 to 1.0 (0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20,
+            // 0.25, 0.30, 0.32, 0.33, 0.35, 0.40, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0) and
+            // every single value lands within 60 s (19.1-21.5 s, tightening
+            // monotonically as handLeft grows). Confirmed this is the clamp's
+            // doing, not a coincidence: re-running the same sweep with the clamp
+            // disabled reproduces the old result exactly (0.01-0.32 land, 0.33
+            // lands slower at 20.26 s, 0.35 and everything above it never lands
+            // within 60 s). What changed: without the clamp, a strong enough pull
+            // could transiently push the descending kite's Direction upwind of the
+            // edge, where it hit the old freeze (Speed pinned at 0, sigma pinned at
+            // 0) and never reached the ground. The clamp added for the hemisphere
+            // fix (see WindowSim.Step) recovers that excursion instead of freezing
+            // it, so the descent completes regardless of how hard the pilot pulls.
+            // handLeft = 0.2 is comfortably inside either version of the band.
             var sim = MakeSim(6.0);
             double beta = 30.0 * MathD.Deg2Rad;
             double phi = 90.0 * MathD.Deg2Rad;
@@ -684,6 +831,23 @@ namespace Kitesim.Core.Tests
         [Test]
         public void StaysStableOverTenMinutesOfSteering()
         {
+            // What this test is: a 30000-step (10-minute, 500 Hz-equivalent at this
+            // dt) smoke test for NaN and blow-up, plus (see below) two invariants
+            // that are independent of the steering controller. It is not, on its
+            // own, a drift detector for the integrator: a review injected six
+            // defects into WindowSim -- dropping the Direction renormalisation,
+            // dropping the Heading orthonormalisation, replacing the exact
+            // great-circle advance with first-order Euler, two turn-rate biases,
+            // and a speed-relaxation scaling -- and the landing/flying-time
+            // assertions below caught none of them, because the pursuit controller
+            // steering toward a moving aim point absorbs systematic errors: it
+            // corrects for a biased turn rate or a slightly-wrong integrator the
+            // same way it corrects for wind gusts. A controller that compensates for
+            // a defect is exactly the thing that must not be trusted to detect it,
+            // which is why the two invariants below were added: they read
+            // Direction and Heading directly, not through the controller's
+            // output.
+            //
             // Measured: the previous steering pattern here, phase = sin(0.7t)*0.7
             // pushed and pulled symmetrically, drifts to the window edge at
             // t = 15.4 s and sits there motionless for the remaining 585 s of the
@@ -694,18 +858,19 @@ namespace Kitesim.Core.Tests
             // but a NaN, which defeats its purpose of exercising the integrator
             // over a long run to catch drift or blow-up.
             //
-            // Measured further: no fixed sin(f*t)*amplitude steering pattern
-            // avoids this. A sweep of about 45 combinations (amplitude 0.1-1.0,
-            // frequency 0.05-4 Hz, starting elevation 20-45 degrees) always ended
-            // parked well before 600 s, because past theta = 90 degrees upwind,
-            // EffectiveWind is negative, Speed clamps to zero (see the fix in
-            // WindowSim.Step), and once Speed is exactly zero the position stops
-            // advancing (sigma = Speed*dt/LineLength = 0) -- an absorbing state no
-            // later steering can undo. A crude position-blind "steer back toward
-            // psi = 0 past a theta limit" guard on top of the oscillation does not
-            // help either (same 90-degree capture), because psi = 0 means "toward
-            // the local zenith," not "toward the window centre," and those only
-            // coincide by accident.
+            // Measured further, and corrected from an earlier draft of this
+            // comment that overstated it: it is not true that *no* fixed
+            // sin(f*t)*amplitude pattern avoids getting captured at the edge. A
+            // wider sweep of 2760 combinations (amplitude, frequency, starting
+            // elevation) found 207 that never froze at all over 600 s, surviving by
+            // repeatedly landing and relaunching hundreds of times. What is true:
+            // none of the 2760 passes both of this test's assertions (mostly
+            // flyingSteps, since landing-and-relaunching spends real time on the
+            // ground), and beyond 60 s of run time no fixed pattern passes at all.
+            // A crude position-blind "steer back toward psi = 0 past a theta limit"
+            // guard on top of the oscillation does not help either (same capture at
+            // the edge), because psi = 0 means "toward the local zenith," not
+            // "toward the window centre," and those only coincide by accident.
             //
             // What does work, measured over the full 600 s run below: steering
             // that re-aims at a point orbiting a hub 30 degrees above the window
@@ -714,8 +879,8 @@ namespace Kitesim.Core.Tests
             // angle. Over the full run it never lands, its angular distance from
             // the window centre never exceeds 52.1 degrees (well short of the
             // 90-degree edge), and Speed never drops below 25.8 m/s -- i.e. it is
-            // airborne and moving for the entire run, which is what this test is
-            // for.
+            // airborne and moving for the entire run, which is what this test uses
+            // to stay flying long enough to be a useful smoke test.
             var sim = MakeSim(8.0);
             const double hubElevationDeg = 30.0;
             const double aimRadiusDeg = 15.0;
@@ -734,6 +899,13 @@ namespace Kitesim.Core.Tests
             int landings = 0;
             int flyingSteps = 0;
             const double flyingThreshold = 5.0; // m/s; measured minimum over the run is 25.8 m/s
+
+            // Drift invariants, independent of the pursuit controller: it reads
+            // Direction and Heading, never writes them, so unlike the
+            // landing/flying assertions above it cannot be steered around a defect
+            // in Step. Tracked as running maxima over all 30000 steps.
+            double maxDirectionLengthError = 0.0;
+            double maxDirectionHeadingDot = 0.0;
 
             for (int i = 0; i < steps; i++)
             {
@@ -769,12 +941,35 @@ namespace Kitesim.Core.Tests
                     sim.Launch(state);
                 }
                 if (state.Speed > flyingThreshold) flyingSteps++;
+
+                double lengthError = MathD.Abs(state.Direction.Length() - 1.0);
+                double dot = MathD.Abs(Vec3.Dot(state.Direction, state.Heading));
+                if (lengthError > maxDirectionLengthError) maxDirectionLengthError = lengthError;
+                if (dot > maxDirectionHeadingDot) maxDirectionHeadingDot = dot;
             }
 
             Assert.Less(landings, 10,
                 "the kite must spend most of the run flying, not cycling through the ground");
             Assert.AreEqual(1.0, state.Direction.Length(), 1e-6);
             Assert.IsFalse(double.IsNaN(state.Speed));
+
+            // Measured over this exact 30000-step run: maxDirectionLengthError =
+            // 2.22e-16, maxDirectionHeadingDot = 1.67e-16 -- both at machine epsilon
+            // for a double (about 2.2e-16), because Step renormalises Direction and
+            // re-orthonormalises Heading against it every single step, so error
+            // never accumulates across steps. The bound below (1e-9) is the same
+            // tolerance already used elsewhere in this file for the same invariant
+            // (e.g. DirectionAndHeadingStayUnitAndOrthogonal): about seven orders of
+            // magnitude above what a healthy integrator actually produces, and
+            // enough margin to be robust to platform floating-point differences,
+            // while still being far too tight for a dropped renormalisation or a
+            // dropped orthonormalisation (either would let the corresponding error
+            // grow roughly linearly step over step across 30000 steps) to pass
+            // unnoticed.
+            Assert.Less(maxDirectionLengthError, 1e-9,
+                "Direction must stay unit length for the entire run -- a dropped renormalisation would show up here even though the pursuit controller absorbs its effect on the trajectory");
+            Assert.Less(maxDirectionHeadingDot, 1e-9,
+                "Heading must stay perpendicular to Direction for the entire run -- a dropped orthonormalisation would show up here even though the pursuit controller absorbs its effect on the trajectory");
 
             // This model has no reverse flight (see the Speed clamp in Step), so
             // Speed can never be negative.
