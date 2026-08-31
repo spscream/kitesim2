@@ -174,8 +174,20 @@ namespace Kitesim.Core
         /// </summary>
         public bool TurnAssist = true;
 
-        /// <summary>The grid of the figures: right angles, and the diagonals between them.</summary>
-        public double TurnAssistGridRad = 45.0 * MathD.Deg2Rad;
+        /// <summary>
+        /// The two grids, chosen by what the hands did rather than by where the kite
+        /// happens to be. From the flier: a right angle is both hands hard in
+        /// opposite directions, a diagonal is one hand, and everything else is flown
+        /// smoothly and wants no help at all.
+        /// </summary>
+        public double TurnAssistCornerRad = 90.0 * MathD.Deg2Rad;
+        public double TurnAssistDiagonalRad = 45.0 * MathD.Deg2Rad;
+
+        /// <summary>A hand counts as working past this fraction of its travel.</summary>
+        public double TurnAssistHardHand = 0.6;
+
+        /// <summary>And as resting below this one.</summary>
+        public double TurnAssistRestingHand = 0.25;
 
         /// <summary>
         /// How far from a node the help reaches. Wider than the five degrees it can

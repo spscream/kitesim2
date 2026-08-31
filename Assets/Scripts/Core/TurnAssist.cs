@@ -39,22 +39,31 @@ namespace Kitesim.Core
         /// on, if any.
         /// </summary>
         /// <param name="pilotSteering">The pilot's own input, -1 to 1, right positive.</param>
+        /// <param name="handLeft">Left hand, as a fraction of full travel, back positive.</param>
+        /// <param name="handRight">Right hand, as a fraction of full travel, back positive.</param>
         /// <param name="headingRad">Heading in the tangent plane, from the same frame as KiteStateView.</param>
         public static double Steering(
-            WindowKiteState state, double pilotSteering, double headingRad, WindowConfiguration config)
+            WindowKiteState state, double pilotSteering, double handLeft, double handRight,
+            double headingRad, WindowConfiguration config)
         {
             if (state == null || config == null || !config.TurnAssist)
             {
                 if (state != null)
+                {
                     state.AssistTarget = double.NaN;
+                    state.AssistGrid = 0.0;
+                }
                 return pilotSteering;
             }
 
             // While the pilot is still turning, they are in charge and this does
-            // nothing at all. That is what lets a turn run through a node.
+            // nothing at all -- that is what lets a turn run through a node. What it
+            // does do is watch the hands, because the gesture says which figure is
+            // being flown, and by the time the hands come back to centre it is over.
             if (MathD.Abs(pilotSteering) > config.TurnAssistFinishInput)
             {
                 state.AssistTarget = double.NaN;
+                state.AssistGrid = GridFromGesture(handLeft, handRight, config);
                 return pilotSteering;
             }
 
@@ -64,7 +73,11 @@ namespace Kitesim.Core
                 if (state.RecentTurnRate < config.TurnAssistTurnRate)
                     return pilotSteering;
 
-                double toNode = ErrorToNearestNode(headingRad, config.TurnAssistGridRad);
+                // And only one the pilot asked for with a corner's worth of hands.
+                if (state.AssistGrid <= 0.0)
+                    return pilotSteering;
+
+                double toNode = ErrorToNearestNode(headingRad, state.AssistGrid);
                 if (MathD.Abs(toNode) > config.TurnAssistCaptureRad)
                     return pilotSteering;
 
@@ -82,6 +95,7 @@ namespace Kitesim.Core
                 // straight: in the tangent frame of the window a straight leg does
                 // not keep a constant heading angle. One turn, one finish.
                 state.RecentTurnRate = 0.0;
+                state.AssistGrid = 0.0;
                 return pilotSteering;
             }
 
@@ -92,6 +106,44 @@ namespace Kitesim.Core
             double finish = MathD.Clamp(wanted, -1.0, 1.0) * config.TurnAssistFinishInput;
 
             return MathD.Clamp(pilotSteering + finish, -1.0, 1.0);
+        }
+
+        /// <summary>
+        /// Which grid the pilot's hands are asking for, radians between nodes, or
+        /// zero for none. The flier's own account of how the figures are flown:
+        ///
+        ///   both hands hard, opposite ways -- a right angle;
+        ///   one hand hard, the other resting -- a diagonal;
+        ///   anything smoother -- not a corner at all, and left alone.
+        ///
+        /// This is a better question than "which node is the kite near", because it
+        /// asks what the pilot is doing rather than guessing from where the kite has
+        /// ended up. It is also what keeps the help away from the smooth passages
+        /// between figures, where nothing should be snapped to anything.
+        /// </summary>
+        public static double GridFromGesture(double handLeft, double handRight, WindowConfiguration config)
+        {
+            if (config == null)
+                return 0.0;
+
+            double left = MathD.Abs(handLeft);
+            double right = MathD.Abs(handRight);
+            double harder = MathD.Max(left, right);
+            double softer = MathD.Min(left, right);
+
+            if (harder < config.TurnAssistHardHand)
+                return 0.0;
+
+            // Both hands hard and pulling against each other: the corner.
+            if (softer >= config.TurnAssistHardHand && handLeft * handRight < 0.0)
+                return config.TurnAssistCornerRad;
+
+            // One hand doing the work: the diagonal. Both hands hard the same way is
+            // neither -- that is the brakes, and it is not a turn.
+            if (softer <= config.TurnAssistRestingHand)
+                return config.TurnAssistDiagonalRad;
+
+            return 0.0;
         }
 
         /// <summary>

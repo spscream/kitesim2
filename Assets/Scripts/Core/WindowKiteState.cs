@@ -38,6 +38,15 @@ namespace Kitesim.Core
         /// </summary>
         public double AssistTarget = double.NaN;
 
+        /// <summary>
+        /// The grid the pilot's own hands asked for while they were turning, radians
+        /// between nodes, or zero for "they did not ask for a corner". Read off the
+        /// gesture -- both hands hard in opposite directions is a right angle, one
+        /// hand is a diagonal -- and remembered until the turn is finished, because
+        /// by the time the hands come back to centre the gesture is over.
+        /// </summary>
+        public double AssistGrid;
+
         public int LineWraps => (int)(AccumulatedTurn / (2.0 * MathD.PI));
 
         /// <summary>
@@ -54,6 +63,7 @@ namespace Kitesim.Core
                 AccumulatedTurn = 0.0,
                 RecentTurnRate = 0.0,
                 AssistTarget = double.NaN,
+                AssistGrid = 0.0,
                 Landed = true
             };
         }

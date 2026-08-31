@@ -11,10 +11,25 @@ namespace Kitesim.Core.Tests
 
         private static WindowConfiguration Off() => new WindowConfiguration { TurnAssist = false };
 
-        /// <summary>A kite that has just been turning hard and is not being steered now.</summary>
-        private static WindowKiteState JustReleased(double recentTurnRate = 4.0)
+        /// <summary>
+        /// A kite that has just been turning hard, with the hands now centred. The
+        /// grid is what the gesture asked for while the turn was on: a right angle
+        /// unless a test says otherwise.
+        /// </summary>
+        private static WindowKiteState JustReleased(double recentTurnRate = 4.0, double gridDeg = 90.0)
         {
-            return new WindowKiteState { RecentTurnRate = recentTurnRate, Landed = false };
+            return new WindowKiteState
+            {
+                RecentTurnRate = recentTurnRate,
+                AssistGrid = Deg(gridDeg),
+                Landed = false
+            };
+        }
+
+        /// <summary>Hands centred: the pilot has let go.</summary>
+        private static double LetGo(WindowKiteState state, double headingDeg, WindowConfiguration config)
+        {
+            return TurnAssist.Steering(state, 0.0, 0.0, 0.0, Deg(headingDeg), config);
         }
 
         /// <summary>
@@ -27,8 +42,8 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            Assert.AreEqual(1.0, TurnAssist.Steering(state, 1.0, Deg(87), On()), 0.0);
-            Assert.AreEqual(-0.8, TurnAssist.Steering(state, -0.8, Deg(87), On()), 0.0);
+            Assert.AreEqual(1.0, TurnAssist.Steering(state, 1.0, -1.0, 1.0, Deg(87), On()), 0.0);
+            Assert.AreEqual(-0.8, TurnAssist.Steering(state, -0.8, 1.0, -1.0, Deg(87), On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget), "and nothing is being finished");
         }
 
@@ -39,10 +54,56 @@ namespace Kitesim.Core.Tests
         [Test]
         public void AKiteThatWasNotTurningIsLeftAlone()
         {
-            var state = new WindowKiteState { RecentTurnRate = 0.2, Landed = false };
+            WindowKiteState state = JustReleased(recentTurnRate: 0.2);
 
-            Assert.AreEqual(0.0, TurnAssist.Steering(state, 0.0, Deg(87), On()), 0.0);
+            Assert.AreEqual(0.0, LetGo(state, 87.0, On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
+        }
+
+        /// <summary>
+        /// The third promise, and the flier's own rule: a right angle is both hands
+        /// hard in opposite directions, a diagonal is one hand, and everything else
+        /// is flown smoothly and wants no help. A turn made with soft hands is left
+        /// alone however close to a node it ends.
+        /// </summary>
+        [Test]
+        public void ATurnFlownWithSoftHandsIsLeftAlone()
+        {
+            WindowKiteState state = JustReleased();
+            TurnAssist.Steering(state, 0.5, -0.25, 0.25, Deg(60), On());
+            Assert.AreEqual(0.0, state.AssistGrid, "no corner was asked for");
+
+            Assert.AreEqual(0.0, LetGo(state, 87.0, On()), 0.0);
+            Assert.IsTrue(double.IsNaN(state.AssistTarget));
+        }
+
+        [Test]
+        public void BothHandsHardInOppositeDirectionsAskForARightAngle()
+        {
+            Assert.AreEqual(Deg(90), TurnAssist.GridFromGesture(-1.0, 1.0, On()), 1e-12);
+            Assert.AreEqual(Deg(90), TurnAssist.GridFromGesture(0.8, -0.7, On()), 1e-12);
+        }
+
+        [Test]
+        public void OneHandAsksForADiagonal()
+        {
+            Assert.AreEqual(Deg(45), TurnAssist.GridFromGesture(0.0, 1.0, On()), 1e-12);
+            Assert.AreEqual(Deg(45), TurnAssist.GridFromGesture(-0.9, 0.1, On()), 1e-12);
+        }
+
+        /// <summary>Both hands the same way is the brakes, and the brakes are not a turn.</summary>
+        [Test]
+        public void BothHandsTheSameWayAskForNothing()
+        {
+            Assert.AreEqual(0.0, TurnAssist.GridFromGesture(0.9, 0.9, On()), 1e-12);
+            Assert.AreEqual(0.0, TurnAssist.GridFromGesture(-0.8, -0.8, On()), 1e-12);
+        }
+
+        [Test]
+        public void SmoothHandsAskForNothing()
+        {
+            Assert.AreEqual(0.0, TurnAssist.GridFromGesture(-0.4, 0.4, On()), 1e-12);
+            Assert.AreEqual(0.0, TurnAssist.GridFromGesture(0.0, 0.5, On()), 1e-12);
         }
 
         [Test]
@@ -50,7 +111,7 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            double steering = TurnAssist.Steering(state, 0.0, Deg(87), On());
+            double steering = LetGo(state, 87.0, On());
 
             Assert.Greater(steering, 0.0, "still turning right, toward 90");
             Assert.AreEqual(Deg(90), state.AssistTarget, 1e-9);
@@ -61,10 +122,38 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            double steering = TurnAssist.Steering(state, 0.0, Deg(93), On());
+            double steering = LetGo(state, 93.0, On());
 
             Assert.Less(steering, 0.0, "turning back left, toward 90");
             Assert.AreEqual(Deg(90), state.AssistTarget, 1e-9);
+        }
+
+        /// <summary>
+        /// A one-handed turn is a diagonal, so forty-five is a node for it and the
+        /// two-handed corner grid would have missed it entirely.
+        /// </summary>
+        [Test]
+        public void AOneHandedTurnFinishesOnTheDiagonal()
+        {
+            WindowKiteState state = JustReleased(gridDeg: 45.0);
+
+            double steering = LetGo(state, 43.0, On());
+
+            Assert.Greater(steering, 0.0);
+            Assert.AreEqual(Deg(45), state.AssistTarget, 1e-9);
+        }
+
+        /// <summary>
+        /// And a two-handed corner does not stop on a diagonal: the pilot asked for a
+        /// right angle, so forty-three degrees is on the way to ninety.
+        /// </summary>
+        [Test]
+        public void ATwoHandedTurnIgnoresTheDiagonals()
+        {
+            WindowKiteState state = JustReleased(gridDeg: 90.0);
+
+            Assert.AreEqual(0.0, LetGo(state, 43.0, On()), 0.0);
+            Assert.IsTrue(double.IsNaN(state.AssistTarget));
         }
 
         /// <summary>
@@ -76,13 +165,13 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            Assert.AreEqual(0.0, TurnAssist.Steering(state, 0.0, Deg(65), On()), 0.0);
+            Assert.AreEqual(0.0, LetGo(state, 65.0, On()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
         }
 
         /// <summary>
-        /// The third promise: it finishes turns, it does not fly them. The help never
-        /// steers harder than the input the pilot has just come below.
+        /// It finishes turns, it does not fly them: the help never steers harder than
+        /// the input the pilot has just come below.
         /// </summary>
         [Test]
         public void ItNeverSteersHarderThanTheInputThePilotLetGoOf()
@@ -92,7 +181,7 @@ namespace Kitesim.Core.Tests
             for (int i = -360; i <= 360; i++)
             {
                 WindowKiteState state = JustReleased(20.0);
-                double steering = TurnAssist.Steering(state, 0.0, Deg(i), config);
+                double steering = LetGo(state, i, config);
 
                 Assert.LessOrEqual(MathD.Abs(steering), config.TurnAssistFinishInput + 1e-12,
                     $"at {i} degrees");
@@ -100,18 +189,11 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void TheDiagonalsAreNodesToo()
-        {
-            Assert.Greater(TurnAssist.Steering(JustReleased(), 0.0, Deg(43), On()), 0.0, "45 is a node");
-            Assert.Less(TurnAssist.Steering(JustReleased(), 0.0, Deg(137), On()), 0.0, "135 is a node");
-        }
-
-        [Test]
         public void HelpIsMirroredLeftAndRight()
         {
             Assert.AreEqual(
-                -TurnAssist.Steering(JustReleased(), 0.0, Deg(87), On()),
-                TurnAssist.Steering(JustReleased(), 0.0, Deg(-87), On()), 1e-12);
+                -LetGo(JustReleased(), 87.0, On()),
+                LetGo(JustReleased(), -87.0, On()), 1e-12);
         }
 
         /// <summary>
@@ -121,30 +203,31 @@ namespace Kitesim.Core.Tests
         [Test]
         public void TheGridSurvivesTheWrapAtHalfATurn()
         {
-            Assert.Greater(TurnAssist.Steering(JustReleased(), 0.0, Deg(177), On()), 0.0);
-            Assert.Less(TurnAssist.Steering(JustReleased(), 0.0, Deg(-177), On()), 0.0);
+            Assert.Greater(LetGo(JustReleased(), 177.0, On()), 0.0);
+            Assert.Less(LetGo(JustReleased(), -177.0, On()), 0.0);
         }
 
         [Test]
         public void ArrivingAtTheNodeEndsTheHelp()
         {
             WindowKiteState state = JustReleased();
-            TurnAssist.Steering(state, 0.0, Deg(87), On());
+            LetGo(state, 87.0, On());
             Assert.IsFalse(double.IsNaN(state.AssistTarget), "finishing");
 
-            double steering = TurnAssist.Steering(state, 0.0, Deg(90), On());
+            double steering = LetGo(state, 90.0, On());
 
             Assert.AreEqual(0.0, steering, 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget), "let go on arrival");
+            Assert.AreEqual(0.0, state.AssistGrid, "and the gesture is spent");
         }
 
         [Test]
         public void TakingHoldAgainCancelsTheHelpImmediately()
         {
             WindowKiteState state = JustReleased();
-            TurnAssist.Steering(state, 0.0, Deg(87), On());
+            LetGo(state, 87.0, On());
 
-            double steering = TurnAssist.Steering(state, -1.0, Deg(88), On());
+            double steering = TurnAssist.Steering(state, -1.0, 1.0, -1.0, Deg(88), On());
 
             Assert.AreEqual(-1.0, steering, 0.0, "the pilot's input, untouched");
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
@@ -155,9 +238,10 @@ namespace Kitesim.Core.Tests
         {
             WindowKiteState state = JustReleased();
 
-            Assert.AreEqual(0.0, TurnAssist.Steering(state, 0.0, Deg(87), Off()), 0.0);
+            Assert.AreEqual(0.0, LetGo(state, 87.0, Off()), 0.0);
             Assert.IsTrue(double.IsNaN(state.AssistTarget));
-            Assert.AreEqual(0.0, TurnAssist.Steering(state, 0.0, Deg(87), null), 0.0);
+            Assert.AreEqual(0.0, state.AssistGrid);
+            Assert.AreEqual(0.0, LetGo(state, 87.0, null), 0.0);
         }
 
         [Test]
@@ -270,6 +354,28 @@ namespace Kitesim.Core.Tests
 
             Assert.IsTrue(double.IsNaN(state.AssistTarget), "the help stays out of it");
             Assert.AreNotEqual(arrived, Heading(state), "and the kite goes on flying");
+        }
+
+        /// <summary>
+        /// The flier's second case, through the model: one hand does a diagonal. The
+        /// same release that finishes on ninety with both hands finishes on
+        /// forty-five with one.
+        /// </summary>
+        [Test]
+        public void AOneHandedTurnFinishesOnTheDiagonal()
+        {
+            WindowSim sim = Sim(assist: true);
+            WindowKiteState state = Flying(10.0);
+
+            // One hand back, the other resting: the diagonal gesture.
+            for (int i = 0; i < 400 && Heading(state) < 42.0; i++)
+                sim.Step(state, Dt, 0.0, Travel, 0.0);
+
+            sim.Step(state, Dt, 0.0, 0.0, 0.0);
+            for (int i = 0; i < 100 && !double.IsNaN(state.AssistTarget); i++)
+                sim.Step(state, Dt, 0.0, 0.0, 0.0);
+
+            Assert.AreEqual(45.0, Heading(state), 1.0, $"ended at {Heading(state):F2} deg");
         }
 
         /// <summary>

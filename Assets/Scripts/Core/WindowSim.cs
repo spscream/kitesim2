@@ -220,7 +220,10 @@ namespace Kitesim.Core
             // contain it and the suite has to be able to test it. It finishes a turn
             // the pilot has let go of; while they are still turning it returns their
             // own input untouched. See TurnAssist.
-            steering = TurnAssist.Steering(state, steering, HeadingRad(state), Config);
+            steering = TurnAssist.Steering(
+                state, steering,
+                handLeft / Config.HandTravel, handRight / Config.HandTravel,
+                HeadingRad(state), Config);
 
             return Config.SteeringGain * airspeed * steering + weightTurn;
         }
