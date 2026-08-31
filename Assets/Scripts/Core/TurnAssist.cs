@@ -1,62 +1,97 @@
 namespace Kitesim.Core
 {
     /// <summary>
-    /// Makes up for the controller, not for the pilot.
+    /// Finishes a turn on the grid, because on a controller the pilot cannot.
     ///
-    /// A flier holds the handles with their hands: 0.7 m of travel, held to about
-    /// five millimetres, which is 0.7% of full input, with the pull in the lines
-    /// telling them where they are. On a gamepad the same command is a thumb on a
-    /// sprung stick: about 5% of full travel, with no way to hold a small offset at
-    /// all, since the spring takes it back. The difference is 0.05 of input, and
-    /// under the turn law that is 0.3 rad/s at 12 m/s -- about five degrees over the
-    /// exit of a turn. That is exactly the "92 or 87 instead of 90" a flier reports
-    /// on the pad, so the number is not a knob: it is the size of the defect.
+    /// The defect is not where I first put it. A hand holds its position far more
+    /// finely than a thumb on a sprung stick, but that is not what loses the right
+    /// angle: at 12 m/s a hard turn runs at about 340 degrees a second, so one frame
+    /// of hesitation is seven degrees and the fifty to eighty milliseconds of a human
+    /// release is twenty. The pilot's aim is fine. Their timing cannot be.
     ///
-    /// Hence the rule this class obeys: **it may never add more input than the
-    /// difference between a stick and a hand.** Inside that budget it eases the
-    /// heading onto the nearest node of the figure grid as a turn ends.
+    /// So this does not steer. It decides **when to stop steering**: when the pilot
+    /// lets go near a node of the figure grid, the turn is carried the last few
+    /// degrees to that node and stopped there. Nothing is added to a turn the pilot
+    /// is still flying -- hold the stick through ninety on the way to a hundred and
+    /// eighty and nothing happens, which is what protects every figure that passes
+    /// through a node on its way somewhere else.
     ///
-    /// Two properties keep it honest, and both are tested. It is gated by the turn
-    /// the pilot is already flying, so with no input it does nothing at all -- it
-    /// cannot turn the kite, only tidy a turn already being made. And it is capped,
-    /// so a pilot who is ten degrees out stays ten degrees out; nobody is flattered
-    /// into precision they do not have.
+    /// Three bounds, all tested:
+    /// - it acts only after the pilot has let go, so it can never begin a turn;
+    /// - it acts only within a capture window of a node, so a pilot aiming somewhere
+    ///   off the grid is left alone;
+    /// - it steers no harder than the input the pilot has just released below, so it
+    ///   finishes a turn and never flies one.
     ///
     /// The grid is measured in the tangent plane of the window, where the heading
     /// already lives: zero toward the zenith, ninety to the pilot's right. That is
-    /// the frame a judge reads straight lines and right angles in.
+    /// the frame the figures are flown and judged in.
+    ///
+    /// This is a rehearsal tool, not a contest between joysticks (owner, 2026-08-31),
+    /// and on the field the same movements are learned on sticks with toy kites. The
+    /// help is on by default and switches off with one key.
     /// </summary>
     public static class TurnAssist
     {
         /// <summary>
-        /// Extra steering to add, in the same units as the pilot's own: the hand
-        /// difference over full travel, positive toward the pilot's right.
+        /// The steering to fly with, given what the pilot is asking for. Updates the
+        /// kite's assist target as a side effect: the node it is currently finishing
+        /// on, if any.
         /// </summary>
-        /// <param name="headingRad">Heading in the tangent plane, from KiteStateView.</param>
-        /// <param name="turnRateRad">
-        /// The turn the pilot is already flying, before any help. This gates the
-        /// whole thing: no turn, no assistance.
-        /// </param>
-        public static double Added(double headingRad, double turnRateRad, WindowConfiguration config)
+        /// <param name="pilotSteering">The pilot's own input, -1 to 1, right positive.</param>
+        /// <param name="headingRad">Heading in the tangent plane, from the same frame as KiteStateView.</param>
+        public static double Steering(
+            WindowKiteState state, double pilotSteering, double headingRad, WindowConfiguration config)
         {
-            if (config == null || !config.TurnAssist)
-                return 0.0;
+            if (state == null || config == null || !config.TurnAssist)
+            {
+                if (state != null)
+                    state.AssistTarget = double.NaN;
+                return pilotSteering;
+            }
 
-            double error = ErrorToNearestNode(headingRad, config.TurnAssistGridRad);
-            if (MathD.Abs(error) > config.TurnAssistCaptureRad)
-                return 0.0;
+            // While the pilot is still turning, they are in charge and this does
+            // nothing at all. That is what lets a turn run through a node.
+            if (MathD.Abs(pilotSteering) > config.TurnAssistFinishInput)
+            {
+                state.AssistTarget = double.NaN;
+                return pilotSteering;
+            }
 
-            // How much of a turn is going on, as a fraction. Nothing is added to a
-            // kite flying straight, and the help fades in and out with the turn
-            // rather than switching.
-            double gate = MathD.Clamp01(MathD.Abs(turnRateRad) / config.TurnAssistTurnRate);
-            if (gate <= 0.0)
-                return 0.0;
+            if (double.IsNaN(state.AssistTarget))
+            {
+                // Only a turn that was actually being flown can be finished.
+                if (state.RecentTurnRate < config.TurnAssistTurnRate)
+                    return pilotSteering;
 
-            double wanted = error / config.TurnAssistCaptureRad;
-            double added = MathD.Clamp(wanted, -1.0, 1.0) * config.TurnAssistMaxInput * gate;
+                double toNode = ErrorToNearestNode(headingRad, config.TurnAssistGridRad);
+                if (MathD.Abs(toNode) > config.TurnAssistCaptureRad)
+                    return pilotSteering;
 
-            return added;
+                state.AssistTarget = headingRad + toNode;
+            }
+
+            double error = WrapPi(state.AssistTarget - headingRad);
+            if (MathD.Abs(error) <= config.TurnAssistArrivedRad)
+            {
+                state.AssistTarget = double.NaN;
+
+                // The turn is spent. Without this the help would latch onto the same
+                // node again as the kite drifts off it, holding the heading for as
+                // long as the memory lasted -- and holding a heading is not flying
+                // straight: in the tangent frame of the window a straight leg does
+                // not keep a constant heading angle. One turn, one finish.
+                state.RecentTurnRate = 0.0;
+                return pilotSteering;
+            }
+
+            // Full authority until the last few degrees, then proportional so the
+            // turn stops on the node rather than ringing around it -- and capped at
+            // the input the pilot has already let go below.
+            double wanted = error / MathD.Max(config.TurnAssistFinishBandRad, 1e-6);
+            double finish = MathD.Clamp(wanted, -1.0, 1.0) * config.TurnAssistFinishInput;
+
+            return MathD.Clamp(pilotSteering + finish, -1.0, 1.0);
         }
 
         /// <summary>

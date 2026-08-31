@@ -22,6 +22,22 @@ namespace Kitesim.Core
 
         public bool Landed = true;
 
+        /// <summary>
+        /// The strongest turn of the last moment, rad/s, decaying with time. The
+        /// model has no rotational inertia -- centre the hands and the turn stops in
+        /// the same step -- so "is a turn going on" cannot be read off the current
+        /// turn rate at the one moment it matters, which is the instant the pilot
+        /// lets go. This remembers it for long enough to finish. See TurnAssist.
+        /// </summary>
+        public double RecentTurnRate;
+
+        /// <summary>
+        /// The heading the steering help is finishing on, radians, or NaN when it is
+        /// not finishing anything. Set when the pilot lets go near a node of the
+        /// figure grid and cleared on arrival. See TurnAssist.
+        /// </summary>
+        public double AssistTarget = double.NaN;
+
         public int LineWraps => (int)(AccumulatedTurn / (2.0 * MathD.PI));
 
         /// <summary>
@@ -36,6 +52,8 @@ namespace Kitesim.Core
                 Heading = Vec3.Up,
                 Speed = 0.0,
                 AccumulatedTurn = 0.0,
+                RecentTurnRate = 0.0,
+                AssistTarget = double.NaN,
                 Landed = true
             };
         }

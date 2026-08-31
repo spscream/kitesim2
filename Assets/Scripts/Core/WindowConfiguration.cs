@@ -185,17 +185,49 @@ namespace Kitesim.Core
         public double TurnAssistCaptureRad = 10.0 * MathD.Deg2Rad;
 
         /// <summary>
-        /// The most it may add, in the pilot's own units of full hand travel. This is
-        /// the gamepad's own error and nothing more: five degrees of heading at the
-        /// exit of a turn.
+        /// Two meanings, and they are the same number on purpose: the input below
+        /// which the pilot counts as having let go, and the hardest the help may
+        /// steer while it finishes. It can therefore never turn the kite harder than
+        /// the pilot was turning it a moment ago, and at 12 m/s it closes the last
+        /// few degrees in well under a tenth of a second.
         /// </summary>
-        public double TurnAssistMaxInput = 0.05;
+        public double TurnAssistFinishInput = 0.35;
 
         /// <summary>
-        /// The turn rate at which the help is at full strength, rad/s. Below it the
-        /// help fades with the turn, so a kite flying straight gets none.
+        /// The turn rate below which there was no turn worth finishing, rad/s. A kite
+        /// drifting across a node is left alone.
         /// </summary>
         public double TurnAssistTurnRate = 1.0;
+
+        /// <summary>
+        /// How close to the node the help eases off, radians. Full authority outside
+        /// this band, proportional inside it, so the turn stops on the node instead
+        /// of ringing around it.
+        ///
+        /// Narrow on purpose. Spread the easing across the whole capture window and
+        /// the help fades faster than the drift it is fighting -- the weight term and
+        /// the turning of the tangent frame as the kite crosses the sky -- and the
+        /// two balance a degree out. Measured: at the capture window it settled 1.1
+        /// degrees short, at three degrees it arrives.
+        /// </summary>
+        public double TurnAssistFinishBandRad = 3.0 * MathD.Deg2Rad;
+
+        /// <summary>
+        /// Close enough to the node to call it arrived and let go. Not tighter than
+        /// one step of the finish is worth -- at flying speed that is over a degree
+        /// -- or the help rings around the node instead of landing on it, which is
+        /// what a 0.3 degree band did.
+        /// </summary>
+        public double TurnAssistArrivedRad = 0.8 * MathD.Deg2Rad;
+
+        /// <summary>
+        /// How long the help keeps the turn in mind after it stops, seconds. This
+        /// model has no rotational inertia: centre the hands and the turn ends in the
+        /// same step, so without a memory the help loses all authority at the one
+        /// moment the last few degrees are decided. Long enough to finish a turn,
+        /// short enough that it is gone before the next figure.
+        /// </summary>
+        public double TurnAssistMemory = 0.6;
 
         public double WalkSpeedBack = 1.7;     // m/s
         public double WalkSpeedForward = 1.2;  // m/s

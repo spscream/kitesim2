@@ -101,6 +101,7 @@ namespace Kitesim.Core
 
             // Rotate the heading inside the tangent plane.
             double turnRate = TurnRate(state, handLeft, handRight);
+            RememberTheTurn(state, turnRate, dt);
             double dPsi = turnRate * dt;
             Vec3 turnNormal = Vec3.Cross(t, p);
             t = t * MathD.Cos(dPsi) + turnNormal * MathD.Sin(dPsi);
@@ -214,19 +215,34 @@ namespace Kitesim.Core
             Vec3 weight = new Vec3(0.0, -Config.WeightTurnCoefficient, 0.0);
             double weightTurn = Vec3.Dot(weight, turnNormal) / airspeed;
 
-            double rate = Config.SteeringGain * airspeed * steering + weightTurn;
-
             // The steering help lives here, inside the model, rather than in the
             // input layer: it changes how the kite flies, so a recorded track has to
-            // contain it and the suite has to be able to test it. It is gated by the
-            // turn already being flown, which is why the unhelped rate is computed
-            // first. See TurnAssist.
-            double added = TurnAssist.Added(HeadingRad(state), rate, Config);
-            if (added == 0.0)
-                return rate;
+            // contain it and the suite has to be able to test it. It finishes a turn
+            // the pilot has let go of; while they are still turning it returns their
+            // own input untouched. See TurnAssist.
+            steering = TurnAssist.Steering(state, steering, HeadingRad(state), Config);
 
-            double helped = MathD.Clamp(steering + added, -1.0, 1.0);
-            return Config.SteeringGain * airspeed * helped + weightTurn;
+            return Config.SteeringGain * airspeed * steering + weightTurn;
+        }
+
+        /// <summary>
+        /// Carry the turn forward for a moment after it stops. Rises instantly with
+        /// the turn and falls away over TurnAssistMemory, so the steering help still
+        /// has authority at the instant the pilot centres their hands -- which is
+        /// exactly when the last few degrees are decided, and exactly when this
+        /// model's turn rate drops to nothing.
+        /// </summary>
+        private void RememberTheTurn(WindowKiteState state, double turnRate, double dt)
+        {
+            double magnitude = MathD.Abs(turnRate);
+            if (magnitude >= state.RecentTurnRate)
+            {
+                state.RecentTurnRate = magnitude;
+                return;
+            }
+
+            double memory = MathD.Max(Config.TurnAssistMemory, 1e-6);
+            state.RecentTurnRate *= MathD.Max(1.0 - dt / memory, 0.0);
         }
 
         /// <summary>
