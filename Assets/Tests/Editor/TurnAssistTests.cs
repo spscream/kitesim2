@@ -561,7 +561,7 @@ namespace Kitesim.Core.Tests
         }
 
         /// <summary>Where the hands come off, which is where an unhelped turn ends.</summary>
-        private static double ReleaseHeading(double releaseAt = 87.0)
+        private static double ReleaseHeading(double releaseAt = 65.0)
         {
             WindowSim sim = Sim(assist: false);
             WindowKiteState state = Flying(20.0);
@@ -577,7 +577,7 @@ namespace Kitesim.Core.Tests
         /// stops: for an unhelped kite that is the instant the hands centre, and for
         /// a helped one the instant it has finished on the node.
         /// </summary>
-        private static double HeadingWhereTheTurnEnds(bool assist, double releaseAt = 87.0)
+        private static double HeadingWhereTheTurnEnds(bool assist, double releaseAt = 65.0)
         {
             WindowSim sim = Sim(assist);
             WindowKiteState state = Flying(20.0);

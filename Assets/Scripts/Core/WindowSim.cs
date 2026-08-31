@@ -74,7 +74,8 @@ namespace Kitesim.Core
             double effectiveWind = EffectiveWind(p);
 
             double targetSpeed = Config.GlideRatio * effectiveWind;
-            state.Speed += (targetSpeed - state.Speed) * MathD.Clamp01(dt / Config.SpeedLag);
+            state.Speed += (targetSpeed - state.Speed)
+                * MathD.Clamp01(dt / SpeedLag(state.Speed, effectiveWind));
 
             // Trade height for speed. Without this the relaxation above is the only
             // thing that can change Speed, so the kite's speed is a pure function of
@@ -199,6 +200,48 @@ namespace Kitesim.Core
         /// window centre. This method uses the full 3D form because the kite's
         /// position, not an assumed-horizontal wind, is what the sim actually tracks.
         /// </summary>
+        /// <summary>
+        /// How long the speed takes to answer a change, seconds. Derived from the
+        /// air the kite is moving through rather than fixed, which is the difference
+        /// between a kite and a first-order filter.
+        ///
+        /// The along-track force on a crosswind kite is
+        /// F = 0.5 * rho * A * v_app * (cl * W_eff - cd * v_app): lift tilted forward
+        /// by the angle between the apparent wind and the flight path, less drag.
+        /// It vanishes at v_app = (cl/cd) * W_eff, which is the glide-ratio target
+        /// the line above relaxes toward, and near there it is linear in the miss.
+        /// Dividing by the mass leaves a relaxation whose time constant is
+        ///
+        ///     tau = m / (0.5 * rho * A * cd * v_app)
+        ///
+        /// -- inversely proportional to the apparent wind, because that is what sets
+        /// how hard the air can push. Nothing here is fitted: mass, area, density and
+        /// cd all already exist for other reasons.
+        ///
+        /// The check that this is the same physics as before: at 15 m/s, an ordinary
+        /// speed across the middle of the window, it comes out at 0.40 s, which is
+        /// exactly the constant that was there by hand.
+        ///
+        /// What changes is the two ends. At the window edge the apparent wind falls
+        /// away, tau grows to seconds, and the kite coasts instead of being braked to
+        /// the power floor in half a second -- the owner's complaint that the edges
+        /// slow the kite too hard. And a kite turning back into the window sees the
+        /// apparent wind rise, tau collapse, and the speed come back sharply: it
+        /// returns to the wind willingly, which is the other half of the same remark.
+        /// </summary>
+        public double SpeedLag(double speed, double effectiveWind)
+        {
+            var (_, cd) = Config.FiniteWingAero();
+
+            // The air the kite actually feels: its own speed and the wind across it.
+            double apparent = MathD.Sqrt(speed * speed + effectiveWind * effectiveWind);
+            double force = 0.5 * Config.AirDensity * Config.SailArea * cd * apparent;
+            if (force < 1e-9)
+                return Config.SpeedLagCeiling;
+
+            return MathD.Min(Config.Mass / force, Config.SpeedLagCeiling);
+        }
+
         public double EffectiveWind(Vec3 direction)
         {
             // Wind.Direction is not guaranteed to be unit length (WindField does not

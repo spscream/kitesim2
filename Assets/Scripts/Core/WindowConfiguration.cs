@@ -10,6 +10,14 @@ namespace Kitesim.Core
         public double SailArea = 0.75;         // m^2
         public double AirDensity = 1.225;      // kg/m^3
 
+        /// <summary>
+        /// Flying weight, kg: frame, sail, bridle and standoffs. The same number
+        /// KiteConfiguration carries; it is here because the speed response is
+        /// derived from it (see WindowSim.SpeedResponse) and a model that has to
+        /// accelerate a mass needs to know the mass.
+        /// </summary>
+        public double Mass = 0.397;
+
         /// <summary>Trim angle of attack set by the bridle. 8 degrees.</summary>
         public double TrimAngleOfAttack = 8.0 * MathD.Deg2Rad;
 
@@ -143,8 +151,14 @@ namespace Kitesim.Core
         /// <summary>Turn rate per unit steering input per unit apparent wind, 1/m.</summary>
         public double SteeringGain = 0.5;
 
-        /// <summary>Time constant of the speed relaxation, seconds.</summary>
-        public double SpeedLag = 0.4;
+        /// <summary>
+        /// Slowest the speed may respond, seconds. Not the response itself: that is
+        /// derived from the air the kite is moving through (see
+        /// WindowSim.SpeedResponse). This only stops the derived time constant from
+        /// running away toward infinity when the apparent wind approaches nothing,
+        /// which would freeze a kite's speed rather than let it coast.
+        /// </summary>
+        public double SpeedLagCeiling = 4.0;
 
         /// <summary>
         /// Fraction of the wind speed that remains available at the zenith and at
@@ -292,7 +306,11 @@ namespace Kitesim.Core
         /// (1.11 m/s), 78.9 km/h at 5 m/s, 131.5 km/h at the novice ceiling
         /// (8.33 m/s), 197.4 km/h at the masters ceiling (12.50 m/s).
         /// </summary>
-        private (double cl, double cd) FiniteWingAero()
+        /// <summary>
+        /// Public because the speed response needs the drag coefficient too, not
+        /// only the ratio of the two: see WindowSim.SpeedLag.
+        /// </summary>
+        public (double cl, double cd) FiniteWingAero()
         {
             var (clInfinite, cdProfile) = AeroPolar.Evaluate(TrimAngleOfAttack);
 

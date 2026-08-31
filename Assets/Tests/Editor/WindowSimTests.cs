@@ -255,6 +255,54 @@ namespace Kitesim.Core.Tests
                 "the kite must still be moving somewhere, not frozen on the edge");
         }
 
+        /// <summary>
+        /// The speed response is derived from the air the kite is in, not fixed. The
+        /// check that this is the same physics as before rather than a new knob: at
+        /// 15 m/s, an ordinary speed across the middle of the window, it comes out at
+        /// the 0.40 s that used to be there by hand.
+        /// </summary>
+        [Test]
+        public void TheSpeedResponseAtOrdinarySpeedIsWhatTheHandPickedConstantWas()
+        {
+            var sim = MakeSim(6.0);
+
+            Assert.AreEqual(0.40, sim.SpeedLag(15.0, 0.0), 0.01);
+        }
+
+        /// <summary>
+        /// And it is slower where there is less air to push against, which is the
+        /// point: at the window edge a kite coasts instead of being braked, and keeps
+        /// the speed it needs to fly back into the window. The owner flew this and
+        /// called the old braking too strong.
+        /// </summary>
+        [Test]
+        public void AKiteWithLittleAirOverItRespondsMoreSlowly()
+        {
+            var sim = MakeSim(6.0);
+
+            Assert.Greater(sim.SpeedLag(3.0, 0.0), 4.0 * sim.SpeedLag(25.0, 0.0));
+            Assert.LessOrEqual(sim.SpeedLag(0.0, 0.0), sim.Config.SpeedLagCeiling);
+        }
+
+        /// <summary>
+        /// The same thing through the model: arriving at the edge with speed, a kite
+        /// still has most of it a moment later. Steering is linear in speed, so this
+        /// is also what gives the pilot the authority to fly back out of the edge --
+        /// the other half of the same complaint.
+        /// </summary>
+        [Test]
+        public void ArrivingAtTheEdgeTheKiteCoastsRatherThanStopping()
+        {
+            var sim = MakeSim(6.0);
+            FreezeInPlace(sim);
+            sim.Config.GravityAlongHeading = 0.0;
+            var state = Flying(new Vec3(1, 0, 0), Vec3.Up, 18.0);
+
+            Run(sim, state, 0.8);
+
+            Assert.Greater(state.Speed, 5.0, "still flying, not braked to the floor");
+        }
+
         [Test]
         public void AtWindowEdge_SpeedFallsToThePowerFloor()
         {
@@ -266,7 +314,12 @@ namespace Kitesim.Core.Tests
             // Directly crosswind at ground level: theta = 90 degrees.
             var state = Flying(new Vec3(1, 0, 0), Vec3.Up, 30.0);
 
-            Run(sim, state, 5.0);
+            // Fifteen seconds, not five. The equilibrium is the same as it always
+            // was, but the last of the deceleration is slow now and should be: with
+            // the speed response derived from the apparent wind, a kite with almost
+            // no air over it has almost nothing to brake against. At five seconds it
+            // is at 1.8 m/s and still coasting down.
+            Run(sim, state, 15.0);
 
             double expected = sim.Config.GlideRatio * sim.Config.PowerFloor * 5.0;
             Assert.AreEqual(expected, state.Speed, 0.2);
@@ -989,8 +1042,15 @@ namespace Kitesim.Core.Tests
         {
             var passive = MakeSim(1.1);
             var active = MakeSim(1.1);
-            var passiveKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
-            var activeKite = Flying(Vec3.Forward, Vec3.Up, 6.0);
+            // Crosswind and up in the window, not climbing from the horizon. Flying
+            // straight up the meridian, the along-track gravity term is the whole
+            // story in a wind this light -- both kites bleed to the floor and the
+            // walking is invisible underneath it -- and starting at the horizon just
+            // lands them. This test is about the wind the pilot makes.
+            var high = new Vec3(0.0, 0.6, 0.8).Normalized();
+            var across = KiteStateView.TangentRight(high);
+            var passiveKite = Flying(high, across, 6.0);
+            var activeKite = Flying(high, across, 6.0);
 
             FreezeInPlace(passive);
             FreezeInPlace(active);
