@@ -35,3 +35,9 @@ UIElementsSchema/
 # Vendored Unity CLI agent skill: reinstall with
 #   unity skill install claude-code --local
 .claude/skills/
+
+# Local agent scratch and foreign crash dumps
+.cursor/
+.agent-memory/
+.superpowers/sdd/
+erl_crash.dump

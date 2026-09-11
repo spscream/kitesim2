@@ -1,0 +1,24 @@
+{
+    "name": "Kitesim.Unity.PlayModeTests",
+    "rootNamespace": "Kitesim.Unity.PlayModeTests",
+    "references": [
+        "Kitesim.Core",
+        "Kitesim.Unity",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

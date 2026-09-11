@@ -118,12 +118,39 @@ namespace Kitesim.Core.Tests
         }
 
         [Test]
-        public void WriteStartsWithANamedHeaderRow()
+        public void WriteStartsWithAVersionLineThenANamedHeaderRow()
         {
             string csv = TrackCsv.Write(TwoPilotsFlying());
+            string[] lines = csv.Split('\n');
 
-            string first = csv.Split('\n')[0].TrimEnd('\r');
-            Assert.AreEqual("time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed", first);
+            Assert.AreEqual("# kitesim-track 1", lines[0].TrimEnd('\r'));
+            Assert.AreEqual("time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed",
+                lines[1].TrimEnd('\r'));
+        }
+
+        [Test]
+        public void ALegacyFileWithoutAVersionLineStillLoads()
+        {
+            string legacy = "time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed\n"
+                + "0,0,0,0,0,0,0,1,0,1,0,10,20,0,0\n";
+
+            TrackCsvReadResult result = TrackCsv.ReadInto(new Track(), legacy);
+
+            Assert.AreEqual(0, result.Version);
+            Assert.AreEqual(1, result.Loaded);
+            Assert.AreEqual(0, result.Skipped);
+        }
+
+        [Test]
+        public void ReadReportsHowManyBrokenLinesItSkipped()
+        {
+            string csv = TrackCsv.Write(TwoPilotsFlying()) + "0.04,0,1.0,2.0\nnot-a-frame\n";
+
+            TrackCsvReadResult result = TrackCsv.ReadInto(new Track(), csv);
+
+            Assert.AreEqual(1, result.Version);
+            Assert.AreEqual(3, result.Loaded);
+            Assert.AreEqual(2, result.Skipped);
         }
 
         [Test]

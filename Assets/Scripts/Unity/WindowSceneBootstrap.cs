@@ -136,6 +136,8 @@ namespace Kitesim.Unity
 
             var cornerToggle = gameObject.AddComponent<CornerChartToggle>();
             cornerToggle.Bind(fisheye);
+            var gridToggle = gameObject.AddComponent<FigureGridToggle>();
+            gridToggle.Bind(sky.FigureGrid);
         }
 
         private void CreateMesh(int index, WindowKiteBehaviour kite, Transform parent)
@@ -171,24 +173,8 @@ namespace Kitesim.Unity
 
         private void CreateInput(int index, WindowKiteBehaviour kite)
         {
-            // PlayerInput's supported explicit-pairing path is its Instantiate API:
-            // enabling a plain component first may auto-pair any global device, or
-            // leave its InputUser invalid. Configure an inactive template so the
-            // clone's first OnEnable receives the indexed device deterministically.
-            var template = new GameObject($"Pilot_{index}");
-            template.SetActive(false);
-
-            var templateInput = template.AddComponent<PlayerInput>();
-            templateInput.actions = inputActions;
-            templateInput.defaultActionMap = "Player";
-            templateInput.neverAutoSwitchControlSchemes = true;
-
-            var pilot = template.AddComponent<WindowPilotInput>();
-            pilot.Bind(kite);
-
-            var playerInput = WindowPilotDeviceAssignment.InstantiateAndAssign(
-                template, index, Gamepad.all, Keyboard.current);
-            Destroy(template);
+            var playerInput = WindowPilotDeviceAssignment.CreatePilotInput(
+                index, Gamepad.all, Keyboard.current, inputActions, kite);
 
             var playerMap = playerInput.actions != null ? playerInput.actions.FindActionMap("Player") : null;
             var deviceNames = string.Join(", ", System.Array.ConvertAll(playerInput.devices.ToArray(), d => d.displayName));

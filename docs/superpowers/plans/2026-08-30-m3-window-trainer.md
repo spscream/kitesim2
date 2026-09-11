@@ -1,5 +1,9 @@
 # M3: 2D Wind-Window Trainer Implementation Plan
 
+> **Архив.** M3 закрыт. Этот план описывает уже сделанную работу и ссылается на
+> удалённые компоненты плоской карты. Не выполнять заново. Текущее состояние —
+> в `docs/STATUS.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a 2D wind-window trainer where up to four gamepad pilots fly kites on a projection of the wind window, with walking, recording and playback.

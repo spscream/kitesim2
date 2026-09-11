@@ -192,5 +192,20 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(0, track.Frames.Count);
             Assert.AreEqual(0.0, track.Duration, 1e-12);
         }
+
+        [Test]
+        public void SamplingALongInterleavedTrackStillHitsTheRightPilot()
+        {
+            var track = new Track();
+            for (int i = 0; i < 200; i++)
+            {
+                double t = i * 0.02;
+                track.Record(t, 0, View(Vec3.Forward, Vec3.Up, 10.0 + i));
+                track.Record(t, 1, View(Vec3.Forward, Vec3.Up, 100.0 + i));
+            }
+
+            Assert.AreEqual(60.0, track.Sample(1.0, 0, 45.0).Speed, 1e-9);
+            Assert.AreEqual(150.0, track.Sample(1.0, 1, 45.0).Speed, 1e-9);
+        }
     }
 }

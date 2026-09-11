@@ -106,8 +106,17 @@ namespace Kitesim.Unity
             CreateBoundaries();
             CreateWindArrow(downwind);
             CreateArcs(wind, lineLength);
+            CreateFigureGrid(wind, lineLength);
             CreateCamera(downwind);
             CreatePilotCamera(downwind);
+        }
+
+        public WindowFigureGrid FigureGrid { get; private set; }
+
+        private void CreateFigureGrid(WindField wind, double lineLength)
+        {
+            FigureGrid = gameObject.AddComponent<WindowFigureGrid>();
+            FigureGrid.Build(wind, lineLength);
         }
 
         private void CreateLight()

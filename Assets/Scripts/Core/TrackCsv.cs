@@ -20,8 +20,24 @@ namespace Kitesim.Core
     /// angle behind them, and a format that dropped it would look correct in every
     /// other respect.
     /// </summary>
+    public readonly struct TrackCsvReadResult
+    {
+        public readonly int Version;
+        public readonly int Loaded;
+        public readonly int Skipped;
+
+        public TrackCsvReadResult(int version, int loaded, int skipped)
+        {
+            Version = version;
+            Loaded = loaded;
+            Skipped = skipped;
+        }
+    }
+
     public static class TrackCsv
     {
+        public const int CurrentVersion = 1;
+        public const string VersionPrefix = "# kitesim-track ";
         public const string Header = "time,pilot,px,py,pz,dx,dy,dz,hx,hy,hz,speed,tension,turns,landed";
 
         private const int ColumnCount = 15;
@@ -29,6 +45,7 @@ namespace Kitesim.Core
         public static string Write(Track track)
         {
             var text = new StringBuilder();
+            text.Append(VersionPrefix).Append(CurrentVersion).Append('\n');
             text.Append(Header).Append('\n');
 
             if (track == null)
@@ -62,19 +79,22 @@ namespace Kitesim.Core
         /// Parse into an existing track, replacing its contents. Frames that do not
         /// parse are skipped rather than throwing: a recording cut short by a crash
         /// ends in a truncated line, and the routine before that line is still worth
-        /// replaying.
+        /// replaying. The returned counts say how much of the file survived.
         /// </summary>
-        public static void ReadInto(Track track, string csv)
+        public static TrackCsvReadResult ReadInto(Track track, string csv)
         {
             if (track == null)
-                return;
+                return new TrackCsvReadResult(0, 0, 0);
 
             track.Clear();
             if (string.IsNullOrEmpty(csv))
-                return;
+                return new TrackCsvReadResult(0, 0, 0);
 
             var culture = CultureInfo.InvariantCulture;
             string[] lines = csv.Split('\n');
+            int version = 0;
+            int loaded = 0;
+            int skipped = 0;
 
             for (int i = 0; i < lines.Length; i++)
             {
@@ -82,18 +102,30 @@ namespace Kitesim.Core
                 if (line.Length == 0 || line.StartsWith("time,"))
                     continue;
 
-                string[] c = line.Split(',');
-                if (c.Length < ColumnCount)
+                if (line.StartsWith(VersionPrefix))
+                {
+                    int.TryParse(line.Substring(VersionPrefix.Length), NumberStyles.Integer,
+                        culture, out version);
+                    continue;
+                }
+
+                if (line.StartsWith("#"))
                     continue;
 
-                if (!double.TryParse(c[0], NumberStyles.Float, culture, out double time)) continue;
-                if (!int.TryParse(c[1], NumberStyles.Integer, culture, out int pilot)) continue;
-                if (!TryVec(c, 2, culture, out Vec3 pilotPosition)) continue;
-                if (!TryVec(c, 5, culture, out Vec3 direction)) continue;
-                if (!TryVec(c, 8, culture, out Vec3 heading)) continue;
-                if (!double.TryParse(c[11], NumberStyles.Float, culture, out double speed)) continue;
-                if (!double.TryParse(c[12], NumberStyles.Float, culture, out double tension)) continue;
-                if (!double.TryParse(c[13], NumberStyles.Float, culture, out double turns)) continue;
+                string[] c = line.Split(',');
+                if (c.Length < ColumnCount
+                    || !double.TryParse(c[0], NumberStyles.Float, culture, out double time)
+                    || !int.TryParse(c[1], NumberStyles.Integer, culture, out int pilot)
+                    || !TryVec(c, 2, culture, out Vec3 pilotPosition)
+                    || !TryVec(c, 5, culture, out Vec3 direction)
+                    || !TryVec(c, 8, culture, out Vec3 heading)
+                    || !double.TryParse(c[11], NumberStyles.Float, culture, out double speed)
+                    || !double.TryParse(c[12], NumberStyles.Float, culture, out double tension)
+                    || !double.TryParse(c[13], NumberStyles.Float, culture, out double turns))
+                {
+                    skipped++;
+                    continue;
+                }
 
                 track.Record(time, pilot, new KiteStateView(
                     pilotPosition,
@@ -106,7 +138,10 @@ namespace Kitesim.Core
                     tension,
                     turns,
                     c[14] == "1"));
+                loaded++;
             }
+
+            return new TrackCsvReadResult(version, loaded, skipped);
         }
 
         private static void Append(StringBuilder text, Vec3 v, CultureInfo culture)

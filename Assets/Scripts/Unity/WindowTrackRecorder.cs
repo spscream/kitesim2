@@ -108,27 +108,27 @@ namespace Kitesim.Unity
 
             StopPlayback();
             StopRecording();
-            TrackCsv.ReadInto(track, File.ReadAllText(FilePath));
-            Debug.Log($"[Track] loaded {track.Frames.Count} frames from {FilePath}");
+            TrackCsvReadResult result = TrackCsv.ReadInto(track, File.ReadAllText(FilePath));
+            Debug.Log($"[Track] loaded {result.Loaded} frames (skipped {result.Skipped}, v{result.Version}) from {FilePath}");
         }
 
         void Update()
         {
             ReadKeys();
 
-            if (IsRecording)
-            {
-                RecordFrames();
-                return;
-            }
-
             if (IsPlaying)
                 ReplayFrames();
         }
 
+        void FixedUpdate()
+        {
+            if (IsRecording)
+                RecordFrames();
+        }
+
         private void RecordFrames()
         {
-            time += Time.deltaTime;
+            time += Time.fixedDeltaTime;
             if (time < nextSample)
                 return;
 

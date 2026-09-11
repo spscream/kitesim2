@@ -48,6 +48,7 @@ namespace Kitesim.Core
     public class Track
     {
         private readonly List<TrackFrame> frames = new List<TrackFrame>();
+        private readonly List<List<int>> framesByPilot = new List<List<int>>();
 
         public IReadOnlyList<TrackFrame> Frames => frames;
 
@@ -79,11 +80,13 @@ namespace Kitesim.Core
                 view.Tension,
                 view.LineTurnsRad,
                 view.Landed));
+            IndexOf(pilotIndex).Add(frames.Count - 1);
         }
 
         public void Clear()
         {
             frames.Clear();
+            framesByPilot.Clear();
         }
 
         /// <summary>
@@ -97,27 +100,33 @@ namespace Kitesim.Core
         {
             TrackFrame? previous = null;
             TrackFrame? next = null;
+            List<int> index = IndexOf(pilotIndex);
 
-            for (int i = 0; i < frames.Count; i++)
+            if (index.Count == 0)
+                return new KiteStateView(Vec3.Zero, Vec3.Forward, Vec3.Up, lineLength, 0.0, 0.0, 0, true);
+
+            int lo = 0;
+            int hi = index.Count - 1;
+            while (lo <= hi)
             {
-                if (frames[i].PilotIndex != pilotIndex)
-                    continue;
-
-                if (frames[i].Time <= time)
-                    previous = frames[i];
-
-                if (frames[i].Time >= time)
-                {
-                    next = frames[i];
-                    break;
-                }
+                int mid = (lo + hi) / 2;
+                double midTime = frames[index[mid]].Time;
+                if (midTime <= time)
+                    lo = mid + 1;
+                else
+                    hi = mid - 1;
             }
+
+            if (hi >= 0)
+                previous = frames[index[hi]];
+            if (lo < index.Count)
+                next = frames[index[lo]];
 
             if (previous == null && next == null)
                 return new KiteStateView(Vec3.Zero, Vec3.Forward, Vec3.Up, lineLength, 0.0, 0.0, 0, true);
 
             if (previous == null)
-                return ToView(next.Value, lineLength);
+                return ToView(next!.Value, lineLength);
 
             if (next == null)
                 return ToView(previous.Value, lineLength);
@@ -156,6 +165,13 @@ namespace Kitesim.Core
                 frame.Tension,
                 frame.LineTurnsRad,
                 frame.Landed);
+        }
+
+        private List<int> IndexOf(int pilotIndex)
+        {
+            while (framesByPilot.Count <= pilotIndex)
+                framesByPilot.Add(new List<int>());
+            return framesByPilot[pilotIndex];
         }
 
         private static Vec3 Lerp(Vec3 a, Vec3 b, double t)
