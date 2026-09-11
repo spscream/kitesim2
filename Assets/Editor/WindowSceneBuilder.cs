@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -13,6 +14,7 @@ namespace Kitesim.Unity.EditorTools
     public static class WindowSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/WindowScene.unity";
+        private const string TrainingScenePath = "Assets/Scenes/TrainingScene.unity";
         private const string ActionsPath = "Assets/kitesim.inputactions";
         private const string ModelPath = "Assets/Models/Fury_v01.blend";
         private const string PilotPath = "Assets/Models/Pilot_v01.fbx";
@@ -93,16 +95,30 @@ namespace Kitesim.Unity.EditorTools
 
         private static void RegisterInBuildSettings()
         {
-            foreach (var existing in EditorBuildSettings.scenes)
+            EditorBuildSettings.scenes = ProductBuildScenes(EditorBuildSettings.scenes);
+        }
+
+        public static EditorBuildSettingsScene[] ProductBuildScenes(
+            EditorBuildSettingsScene[] currentScenes)
+        {
+            var scenes = new List<EditorBuildSettingsScene>
             {
-                if (existing.path == ScenePath)
-                    return;
+                new EditorBuildSettingsScene(ScenePath, true),
+                new EditorBuildSettingsScene(TrainingScenePath, false)
+            };
+
+            if (currentScenes == null)
+                return scenes.ToArray();
+
+            foreach (var scene in currentScenes)
+            {
+                if (scene.path == ScenePath || scene.path == TrainingScenePath)
+                    continue;
+
+                scenes.Add(new EditorBuildSettingsScene(scene.path, false));
             }
 
-            var scenes = new EditorBuildSettingsScene[EditorBuildSettings.scenes.Length + 1];
-            EditorBuildSettings.scenes.CopyTo(scenes, 0);
-            scenes[scenes.Length - 1] = new EditorBuildSettingsScene(ScenePath, true);
-            EditorBuildSettings.scenes = scenes;
+            return scenes.ToArray();
         }
     }
 }

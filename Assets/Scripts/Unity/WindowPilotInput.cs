@@ -5,8 +5,8 @@ namespace Kitesim.Unity
 {
     /// <summary>
     /// Reads one pilot's controls and feeds them to that pilot's kite. Sits on the
-    /// same GameObject as a PlayerInput component, so PlayerInputManager pairs one
-    /// gamepad per pilot automatically.
+    /// same GameObject as a PlayerInput component whose device is assigned explicitly
+    /// by WindowSceneBootstrap.
     ///
     /// Hands are position control: the stick axis is the hand's fore-aft position,
     /// rate-limited to a human hand speed so that a keyboard key does not teleport

@@ -1,0 +1,22 @@
+{
+    "name": "Kitesim.Unity.EditorTests",
+    "rootNamespace": "Kitesim.Unity.EditorTests",
+    "references": [
+        "Kitesim.Unity",
+        "Kitesim.Unity.EditorTools",
+        "Unity.InputSystem",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

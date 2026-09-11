@@ -8,7 +8,7 @@ namespace Kitesim.Unity
     /// Assembles the wind-window trainer and its views.
     ///
     /// The simulation is built once: one kite plus one PlayerInput per pilot,
-    /// with PlayerInputManager pairing a gamepad to each pilot as it joins. There
+    /// with a dedicated indexed gamepad assigned to each fixed pilot slot. There
     /// is a single 3D world on top of it (SkyView, WindowKiteMesh), and every view
     /// is a camera on that world: the judge, the pilot's own eyes, and the window
     /// chart, which is that same world seen through a fisheye at the pilot's hands.
@@ -38,7 +38,7 @@ namespace Kitesim.Unity
         /// first time wants to see. Settable up to 4 in the inspector for team play
         /// once real gamepads are attached.
         /// </summary>
-        [SerializeField] private int pilotCount = 1;
+        [SerializeField, Range(1, 4)] private int pilotCount = 1;
         [SerializeField] private double windSpeed = 5.0;
         [SerializeField] private ChartProjection projection = ChartProjection.Equidistant;
 
@@ -68,6 +68,13 @@ namespace Kitesim.Unity
 
         void Awake()
         {
+            if (!TryValidateConfiguration(pilotCount, inputActions, out string error))
+            {
+                Debug.LogError($"[WindowSceneBootstrap] Cannot start scene: {error}", this);
+                enabled = false;
+                return;
+            }
+
             var wind = new WindField { Speed = windSpeed, Direction = Vec3.Forward };
 
             var skyRoot = new GameObject("SkyView");
@@ -164,29 +171,47 @@ namespace Kitesim.Unity
 
         private void CreateInput(int index, WindowKiteBehaviour kite)
         {
-            // Built inactive on purpose. new GameObject(...) returns an active object,
-            // and AddComponent<PlayerInput>() runs Awake/OnEnable synchronously — if
-            // that happened before "actions" and "defaultActionMap" were assigned,
-            // PlayerInput would enable nothing and every action would silently read
-            // as never-pressed forever after, with no exception to point at it. Keep
-            // the object inactive until it is fully configured, then activate it once
-            // so Awake/OnEnable run exactly once with everything already in place.
-            var go = new GameObject($"Pilot_{index}");
-            go.SetActive(false);
+            // PlayerInput's supported explicit-pairing path is its Instantiate API:
+            // enabling a plain component first may auto-pair any global device, or
+            // leave its InputUser invalid. Configure an inactive template so the
+            // clone's first OnEnable receives the indexed device deterministically.
+            var template = new GameObject($"Pilot_{index}");
+            template.SetActive(false);
 
-            var playerInput = go.AddComponent<PlayerInput>();
-            playerInput.actions = inputActions;
-            playerInput.defaultActionMap = "Player";
+            var templateInput = template.AddComponent<PlayerInput>();
+            templateInput.actions = inputActions;
+            templateInput.defaultActionMap = "Player";
+            templateInput.neverAutoSwitchControlSchemes = true;
 
-            var pilot = go.AddComponent<WindowPilotInput>();
+            var pilot = template.AddComponent<WindowPilotInput>();
             pilot.Bind(kite);
 
-            go.SetActive(true);
+            var playerInput = WindowPilotDeviceAssignment.InstantiateAndAssign(
+                template, index, Gamepad.all, Keyboard.current);
+            Destroy(template);
 
             var playerMap = playerInput.actions != null ? playerInput.actions.FindActionMap("Player") : null;
             var deviceNames = string.Join(", ", System.Array.ConvertAll(playerInput.devices.ToArray(), d => d.displayName));
             Debug.Log($"[WindowSceneBootstrap] Pilot {index}: Player map enabled={playerMap != null && playerMap.enabled}, " +
                 $"devices={playerInput.devices.Count} [{deviceNames}], controlScheme={playerInput.currentControlScheme}");
+        }
+
+        public static bool TryValidateConfiguration(int count, InputActionAsset actions, out string error)
+        {
+            if (count < 1 || count > 4)
+            {
+                error = $"pilotCount must be in range 1..4, but was {count}.";
+                return false;
+            }
+
+            if (actions == null)
+            {
+                error = "inputActions is not assigned.";
+                return false;
+            }
+
+            error = null;
+            return true;
         }
     }
 }
