@@ -40,6 +40,12 @@ namespace Kitesim.Unity
         /// </summary>
         [SerializeField, Range(1, 4)] private int pilotCount = 1;
         [SerializeField] private double windSpeed = 5.0;
+
+        /// <summary>
+        /// M4.2 hang check: fly the rigid 100Sixteen instead of the window trainer.
+        /// Off by default — the rigid body has no hand steering yet.
+        /// </summary>
+        [SerializeField] private bool rigidHangPreview = false;
         [SerializeField] private ChartProjection projection = ChartProjection.Equidistant;
 
         /// <summary>
@@ -75,7 +81,11 @@ namespace Kitesim.Unity
                 return;
             }
 
-            var wind = new WindField { Speed = windSpeed, Direction = Vec3.Forward };
+            var wind = new WindField
+            {
+                Speed = rigidHangPreview ? 6.0 : windSpeed,
+                Direction = Vec3.Forward
+            };
 
             var skyRoot = new GameObject("SkyView");
 
@@ -168,14 +178,14 @@ namespace Kitesim.Unity
         {
             var go = new GameObject($"Kite_{index}");
             var kite = go.AddComponent<WindowKiteBehaviour>();
-            kite.Configure(index, start, wind);
+            kite.Configure(index, start, wind, rigidHangPreview);
             return kite;
         }
 
         private void CreateInput(int index, WindowKiteBehaviour kite)
         {
             var playerInput = WindowPilotDeviceAssignment.CreatePilotInput(
-                index, Gamepad.all, Keyboard.current, inputActions, kite);
+                index, Gamepad.all, WindowPilotDeviceAssignment.FirstKeyboard(), inputActions, kite);
 
             var playerMap = playerInput.actions != null ? playerInput.actions.FindActionMap("Player") : null;
             var deviceNames = string.Join(", ", System.Array.ConvertAll(playerInput.devices.ToArray(), d => d.displayName));

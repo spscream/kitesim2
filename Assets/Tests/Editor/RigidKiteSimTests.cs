@@ -48,5 +48,21 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(45.0, sim.LineLength(state, left: true), 0.05);
             Assert.AreEqual(45.0, sim.LineLength(state, left: false), 0.05);
         }
+
+        [Test]
+        public void ViewPlacesTheKiteDownwindOfThePilotWithTheNoseTowardTheZenith()
+        {
+            RigidKiteSim sim = RigidKiteSim.HundredSixteen();
+            RigidKiteState state = sim.SpawnDownwind(elevationY: 15.0);
+            KiteStateView view = sim.View(state);
+
+            Assert.IsFalse(view.Landed);
+            Assert.Greater(view.WorldPosition.Y, 1.0);
+            Assert.Greater(view.Direction.Z, 0.0, "downwind of the origin");
+            Assert.Greater(view.Heading.Y, 0.0, "nose toward the sky so the mesh can aim");
+            Assert.AreEqual(view.WorldPosition.X, view.PilotPosition.X + view.Direction.X * view.LineLength, 1e-9);
+            Assert.AreEqual(view.WorldPosition.Y, view.PilotPosition.Y + view.Direction.Y * view.LineLength, 1e-9);
+            Assert.AreEqual(view.WorldPosition.Z, view.PilotPosition.Z + view.Direction.Z * view.LineLength, 1e-9);
+        }
     }
 }

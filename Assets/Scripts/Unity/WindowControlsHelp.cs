@@ -62,6 +62,14 @@ namespace Kitesim.Unity
             if (GUI.Button(buttonRect, "?"))
                 TogglePinned();
 
+            var kite = UnityEngine.Object.FindFirstObjectByType<WindowKiteBehaviour>();
+            if (kite != null && kite.Landed)
+            {
+                GUI.Label(
+                    new Rect(margin, Screen.height - margin - button, 280f, button),
+                    "On the ground — Space to launch");
+            }
+
             if (!Pinned && !hover)
                 return;
 

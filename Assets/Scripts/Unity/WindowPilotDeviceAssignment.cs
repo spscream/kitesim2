@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Users;
 
 namespace Kitesim.Unity
 {
@@ -13,6 +14,17 @@ namespace Kitesim.Unity
         private const string GamepadScheme = "Gamepad";
         private const string KeyboardScheme = "Keyboard";
         private const string NoDeviceScheme = "NoDevice";
+
+#if UNITY_EDITOR
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void SendEditorKeysToTheGameView()
+        {
+            InputSystem.settings.editorInputBehaviorInPlayMode =
+                InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+            InputSystem.settings.backgroundBehavior =
+                InputSettings.BackgroundBehavior.IgnoreFocus;
+        }
+#endif
 
         public static PlayerInput CreatePilotInput(
             int pilotIndex,
@@ -57,11 +69,14 @@ namespace Kitesim.Unity
                 playerInput.gameObject.name = $"Pilot_{pilotIndex}";
                 playerInput.gameObject.AddComponent<OwnedInputActionAsset>()
                     .Initialize(playerInput.actions);
+                playerInput.gameObject.AddComponent<WindowPilotKeyboardCatch>()
+                    .Bind(playerInput, pilotIndex);
 
                 if (playerInput.actions != slotActions)
                     UnityEngine.Object.Destroy(slotActions);
 
                 ValidateAssignment(playerInput, pilotIndex, device);
+                TryBindKeyboardIfEmpty(playerInput, keyboard);
                 if (device == null)
                 {
                     Debug.LogWarning($"[WindowSceneBootstrap] Pilot {pilotIndex} has no dedicated input device; "
@@ -82,6 +97,40 @@ namespace Kitesim.Unity
             {
                 UnityEngine.Object.Destroy(template);
             }
+        }
+
+        /// <summary>
+        /// Pair a keyboard onto an empty pilot-0 slot. Assignment happens in Awake,
+        /// often before the Game view has focus, so Keyboard.current is still null
+        /// and the slot is born as NoDevice. When the keyboard appears we catch it.
+        /// </summary>
+        public static bool TryBindKeyboardIfEmpty(PlayerInput playerInput, Keyboard keyboard)
+        {
+            if (playerInput == null || keyboard == null || !keyboard.added)
+                return false;
+            if (playerInput.devices.Count > 0)
+                return false;
+            if (!playerInput.user.valid)
+                return false;
+
+            playerInput.user.UnpairDevices();
+            InputUser.PerformPairingWithDevice(keyboard, playerInput.user);
+            playerInput.SwitchCurrentControlScheme(KeyboardScheme, keyboard);
+            playerInput.actions.devices = new[] { keyboard };
+            playerInput.ActivateInput();
+            return playerInput.devices.Count > 0;
+        }
+
+        public static Keyboard FirstKeyboard()
+        {
+            if (Keyboard.current != null)
+                return Keyboard.current;
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is Keyboard keyboard)
+                    return keyboard;
+            }
+            return null;
         }
 
         public static InputDevice SelectDevice(int pilotIndex,
@@ -138,6 +187,52 @@ namespace Kitesim.Unity
         {
             if (actions != null)
                 Destroy(actions);
+        }
+    }
+
+    /// <summary>
+    /// Pilot 0 keeps listening for a keyboard after spawn. Play Mode in the Editor
+    /// often starts with the Game view unfocused, so the Input System has no
+    /// keyboard yet and the slot would otherwise stay on NoDevice forever.
+    /// </summary>
+    internal sealed class WindowPilotKeyboardCatch : MonoBehaviour
+    {
+        private PlayerInput playerInput;
+        private int pilotIndex;
+
+        public void Bind(PlayerInput input, int index)
+        {
+            playerInput = input;
+            pilotIndex = index;
+            TryBind();
+        }
+
+        void OnEnable()
+        {
+            InputSystem.onDeviceChange += OnDeviceChange;
+            TryBind();
+        }
+
+        void OnDisable()
+        {
+            InputSystem.onDeviceChange -= OnDeviceChange;
+        }
+
+        void OnDeviceChange(InputDevice device, InputDeviceChange change)
+        {
+            if (device is not Keyboard)
+                return;
+            if (change == InputDeviceChange.Added
+                || change == InputDeviceChange.Reconnected
+                || change == InputDeviceChange.Enabled)
+                TryBind();
+        }
+
+        void TryBind()
+        {
+            if (pilotIndex != 0)
+                return;
+            WindowPilotDeviceAssignment.TryBindKeyboardIfEmpty(playerInput, WindowPilotDeviceAssignment.FirstKeyboard());
         }
     }
 }

@@ -2,6 +2,7 @@
     "name": "Kitesim.Unity.EditorTests",
     "rootNamespace": "Kitesim.Unity.EditorTests",
     "references": [
+        "Kitesim.Core",
         "Kitesim.Unity",
         "Kitesim.Unity.EditorTools",
         "Unity.InputSystem",

@@ -1,9 +1,11 @@
+using Kitesim.Core;
 using Kitesim.Unity;
 using Kitesim.Unity.EditorTools;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.LowLevel;
 
 namespace Kitesim.Unity.EditorTests
 {
@@ -54,6 +56,25 @@ namespace Kitesim.Unity.EditorTests
         }
 
         [Test]
+        public void RigidHangPreviewStartsTheKiteInTheAir()
+        {
+            var go = new GameObject("Kite");
+            try
+            {
+                var kite = go.AddComponent<WindowKiteBehaviour>();
+                kite.Configure(0, Vec3.Zero, new WindField { Speed = 6.0, Direction = Vec3.Forward },
+                    rigidHangPreview: true);
+
+                Assert.IsFalse(kite.Landed);
+                Assert.Greater(kite.View.WorldPosition.Y, 1.0);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void IndexedGamepadsAreAssignedInOrderAndKeyboardIsOnlyPilotZeroFallback()
         {
             var pads = new[] { MakePad(), MakePad() };
@@ -73,6 +94,64 @@ namespace Kitesim.Unity.EditorTests
             finally
             {
                 InputSystem.RemoveDevice(keyboard);
+            }
+        }
+
+        [Test]
+        public void KeyboardOverlayReadsHeldKeysWithoutPlayerInput()
+        {
+            var keyboard = InputSystem.AddDevice<Keyboard>();
+            try
+            {
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.A, Key.P, Key.W));
+                InputSystem.Update();
+
+                float left = 0f, right = 0f, walk = 0f;
+                bool launch = false;
+                WindowPilotInput.OverlayKeyboard(keyboard, ref left, ref right, ref walk, ref launch);
+
+                Assert.AreEqual(-1f, left);
+                Assert.AreEqual(1f, right);
+                Assert.AreEqual(1f, walk);
+                Assert.IsFalse(launch);
+            }
+            finally
+            {
+                InputSystem.RemoveDevice(keyboard);
+            }
+        }
+
+        [Test]
+        public void EmptyPilotZeroPicksUpAKeyboardThatAppearsLater()
+        {
+            var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>("Assets/kitesim.inputactions");
+            Assert.IsNotNull(actions, "the product input asset must be on disk");
+
+            var kiteGo = new GameObject("Kite");
+            var kite = kiteGo.AddComponent<WindowKiteBehaviour>();
+            kite.Configure(0, Vec3.Zero, new WindField { Speed = 5.0, Direction = Vec3.Forward });
+
+            PlayerInput player = null;
+            Keyboard keyboard = null;
+            try
+            {
+                player = WindowPilotDeviceAssignment.CreatePilotInput(
+                    0, System.Array.Empty<Gamepad>(), null, actions, kite);
+                Assert.AreEqual(0, player.devices.Count, "no device at spawn");
+
+                keyboard = InputSystem.AddDevice<Keyboard>();
+                Assert.IsTrue(WindowPilotDeviceAssignment.TryBindKeyboardIfEmpty(player, keyboard));
+                Assert.AreEqual(1, player.devices.Count);
+                Assert.AreSame(keyboard, player.devices[0]);
+                Assert.AreEqual("Keyboard", player.currentControlScheme);
+            }
+            finally
+            {
+                if (player != null)
+                    Object.DestroyImmediate(player.gameObject);
+                Object.DestroyImmediate(kiteGo);
+                if (keyboard != null && keyboard.added)
+                    InputSystem.RemoveDevice(keyboard);
             }
         }
 

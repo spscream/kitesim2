@@ -59,12 +59,43 @@ namespace Kitesim.Core
 
         public RigidKiteState SpawnDownwind(double elevationY)
         {
+            Vec3 pilot = (HandLeft + HandRight) * 0.5;
             double z = MathD.Sqrt(RestLength * RestLength - elevationY * elevationY);
-            Vec3 position = new Vec3(0.0, elevationY, z);
-            RigidKiteState state = RigidKiteState.At(position);
-            state.Orientation = FacingPilot(position);
+            Vec3 fromPilot = new Vec3(0.0, elevationY, z);
+            RigidKiteState state = RigidKiteState.At(pilot + fromPilot);
+            state.Orientation = FacingPilot(fromPilot);
             ProjectLines(state);
             return state;
+        }
+
+        /// <summary>
+        /// Snapshot the mesh already consumes. Position is the centre of mass;
+        /// heading is the nose projected off the line so LookRotation can aim it.
+        /// </summary>
+        public KiteStateView View(RigidKiteState state)
+        {
+            Vec3 pilot = (HandLeft + HandRight) * 0.5;
+            Vec3 toKite = state.Position - pilot;
+            double length = toKite.Length();
+            Vec3 direction = length > 1e-9 ? toKite / length : Vec3.Forward;
+            Vec3 nose = state.Orientation * Vec3.Forward;
+            Vec3 heading = nose - direction * Vec3.Dot(nose, direction);
+            if (heading.SqrLength < 1e-12)
+                heading = KiteStateView.TangentUp(direction);
+            else
+                heading = heading.Normalized();
+
+            bool landed = state.Position.Y < 0.15;
+            double tension = landed ? 0.5 : 50.0;
+            return new KiteStateView(
+                pilot,
+                direction,
+                heading,
+                length,
+                state.Velocity.Length(),
+                tension,
+                0.0,
+                landed);
         }
 
         public double LineLength(RigidKiteState state, bool left)

@@ -18,6 +18,8 @@ namespace Kitesim.Unity
 
         private WindowSim sim;
         private WindowKiteState state;
+        private RigidKiteSim rigid;
+        private RigidKiteState rigidState;
 
         /// <summary>
         /// Set while a recorded track is playing. Everything downstream -- the mesh,
@@ -45,8 +47,10 @@ namespace Kitesim.Unity
         public double AssistTarget => state != null ? state.AssistTarget : double.NaN;
         public bool Landed => playbackView.HasValue
             ? playbackView.Value.Landed
-            : state != null && state.Landed;
-        public KiteStateView View => playbackView ?? sim.View(state);
+            : rigid != null
+                ? rigid.View(rigidState).Landed
+                : state != null && state.Landed;
+        public KiteStateView View => playbackView ?? (rigid != null ? rigid.View(rigidState) : sim.View(state));
 
         /// <summary>Feed one replayed frame. The live model is frozen until Resume.</summary>
         public void ShowPlaybackFrame(KiteStateView view)
@@ -62,6 +66,11 @@ namespace Kitesim.Unity
 
         public void Configure(int index, Vec3 startPilotPosition, WindField wind)
         {
+            Configure(index, startPilotPosition, wind, rigidHangPreview: false);
+        }
+
+        public void Configure(int index, Vec3 startPilotPosition, WindField wind, bool rigidHangPreview)
+        {
             pilotIndex = index;
             sim = new WindowSim(new WindowConfiguration())
             {
@@ -70,6 +79,15 @@ namespace Kitesim.Unity
                 PilotVelocity = Vec3.Zero
             };
             state = WindowKiteState.OnGround(0.0);
+
+            if (!rigidHangPreview)
+                return;
+
+            rigid = RigidKiteSim.HundredSixteen();
+            rigid.Wind = wind;
+            rigid.HandLeft = startPilotPosition + new Vec3(-0.12, 0.0, 0.0);
+            rigid.HandRight = startPilotPosition + new Vec3(0.12, 0.0, 0.0);
+            rigidState = rigid.SpawnDownwind(15.0);
         }
 
         /// <summary>
@@ -95,12 +113,16 @@ namespace Kitesim.Unity
 
         public void Launch()
         {
+            if (rigid != null)
+                return;
             sim.Launch(state);
         }
 
         public void SetWind(WindField wind)
         {
             sim.Wind = wind;
+            if (rigid != null)
+                rigid.Wind = wind;
         }
 
         void FixedUpdate()
@@ -109,6 +131,12 @@ namespace Kitesim.Unity
             // leave the kite somewhere else the moment playback stops.
             if (sim == null || playbackView.HasValue)
                 return;
+
+            if (rigid != null)
+            {
+                rigid.Step(rigidState, Time.fixedDeltaTime);
+                return;
+            }
 
             // Hand axes are positions in metres; the axis is scaled by the
             // configured half-travel. Walk is a rate and passes through raw.

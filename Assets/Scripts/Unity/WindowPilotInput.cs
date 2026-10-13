@@ -49,8 +49,20 @@ namespace Kitesim.Unity
             if (kite == null)
                 return;
 
+            if (kite.PilotIndex == 0 && playerInput.devices.Count == 0)
+                WindowPilotDeviceAssignment.TryBindKeyboardIfEmpty(
+                    playerInput, WindowPilotDeviceAssignment.FirstKeyboard());
+
             float rawLeft = pullLeft.ReadValue<float>();
             float rawRight = pullRight.ReadValue<float>();
+            float rawWalk = walk.ReadValue<float>();
+            bool launchPressed = launch.WasPressedThisFrame();
+
+            // Pilot 0 always reads the physical keyboard, even when PlayerInput
+            // already has a device. Pairing FastKeyboard in the Editor does not
+            // mean the action map is receiving HID; the device state does.
+            if (kite.PilotIndex == 0)
+                OverlayKeyboard(Keyboard.current, ref rawLeft, ref rawRight, ref rawWalk, ref launchPressed);
 
             float step = handRatePerSecond * Time.deltaTime;
             smoothedLeft = Mathf.MoveTowards(smoothedLeft, rawLeft, step);
@@ -60,10 +72,39 @@ namespace Kitesim.Unity
             // kite; the raw pair is what the pilot is asking for. They are the same
             // thing on real handles and 0.18 s apart on a stick, which matters to the
             // steering help and to nothing else.
-            kite.SetInputs(smoothedLeft, smoothedRight, walk.ReadValue<float>(), rawLeft, rawRight);
+            kite.SetInputs(smoothedLeft, smoothedRight, rawWalk, rawLeft, rawRight);
 
-            if (launch.WasPressedThisFrame())
+            if (launchPressed)
                 kite.Launch();
+        }
+
+        /// <summary>
+        /// Overlay A/D, O/P, W/S and Space from a keyboard onto already-read
+        /// action values. Held keys win; unpressed keys leave the action value.
+        /// </summary>
+        public static void OverlayKeyboard(
+            Keyboard keyboard, ref float left, ref float right, ref float walk, ref bool launch)
+        {
+            if (keyboard == null)
+                return;
+
+            if (keyboard.aKey.isPressed || keyboard.dKey.isPressed)
+                left = Axis(keyboard.aKey.isPressed, keyboard.dKey.isPressed);
+            if (keyboard.oKey.isPressed || keyboard.pKey.isPressed)
+                right = Axis(keyboard.oKey.isPressed, keyboard.pKey.isPressed);
+            if (keyboard.sKey.isPressed || keyboard.wKey.isPressed)
+                walk = Axis(keyboard.sKey.isPressed, keyboard.wKey.isPressed);
+            launch = launch || keyboard.spaceKey.wasPressedThisFrame;
+        }
+
+        private static float Axis(bool negative, bool positive)
+        {
+            float value = 0f;
+            if (positive)
+                value += 1f;
+            if (negative)
+                value -= 1f;
+            return value;
         }
     }
 }
