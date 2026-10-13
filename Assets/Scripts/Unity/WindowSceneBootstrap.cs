@@ -94,6 +94,7 @@ namespace Kitesim.Unity
             var wraps = gameObject.AddComponent<WindowWrapHud>();
             wraps.Build(wind, pilotCount);
             var assist = gameObject.AddComponent<TurnAssistToggle>();
+            gameObject.AddComponent<WindowControlsHelp>();
             var probe = gameObject.AddComponent<WindowInputProbe>();
             probe.Bind(recorder);
 
