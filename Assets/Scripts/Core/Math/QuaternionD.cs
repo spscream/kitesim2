@@ -56,6 +56,25 @@ namespace Kitesim.Core
             );
         }
 
+        public QuaternionD Conjugate() => new QuaternionD(-X, -Y, -Z, W);
+
+        public QuaternionD Normalized()
+        {
+            double len = MathD.Sqrt(X * X + Y * Y + Z * Z + W * W);
+            if (len < 1e-15)
+                return Identity;
+            return new QuaternionD(X / len, Y / len, Z / len, W / len);
+        }
+
+        public static QuaternionD operator *(QuaternionD a, QuaternionD b)
+        {
+            return new QuaternionD(
+                a.W * b.X + a.X * b.W + a.Y * b.Z - a.Z * b.Y,
+                a.W * b.Y - a.X * b.Z + a.Y * b.W + a.Z * b.X,
+                a.W * b.Z + a.X * b.Y - a.Y * b.X + a.Z * b.W,
+                a.W * b.W - a.X * b.X - a.Y * b.Y - a.Z * b.Z);
+        }
+
         public static Vec3 operator *(QuaternionD q, Vec3 v)
         {
             // t = axis * sin(theta/2)
@@ -63,6 +82,24 @@ namespace Kitesim.Core
             Vec3 txv = Vec3.Cross(t, v);
             Vec3 txtxv = Vec3.Cross(t, txv);
             return v + 2.0 * (q.W * txv + txtxv);
+        }
+
+        /// <summary>
+        /// Body-frame angular velocity that takes <paramref name="from"/> to
+        /// <paramref name="to"/> over <paramref name="dt"/>.
+        /// </summary>
+        public static Vec3 BodyOmega(QuaternionD from, QuaternionD to, double dt)
+        {
+            if (dt < 1e-15)
+                return Vec3.Zero;
+
+            QuaternionD dq = from.Conjugate() * to;
+            Vec3 imag = new Vec3(dq.X, dq.Y, dq.Z);
+            double sinHalf = imag.Length();
+            double angle = 2.0 * MathD.Atan2(sinHalf, dq.W);
+            if (sinHalf < 1e-15)
+                return Vec3.Zero;
+            return imag * (angle / (sinHalf * dt));
         }
     }
 }
