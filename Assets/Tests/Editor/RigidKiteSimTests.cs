@@ -92,5 +92,30 @@ namespace Kitesim.Core.Tests
             Assert.Greater(sim.View(state).HeadingRad, heading0 + 0.05,
                 "right pull must yaw toward +HeadingRad (pilot's right)");
         }
+
+        [Test]
+        public void TurnRateScalesWithHandDifference()
+        {
+            double r06v6 = MeanTurnRate(wind: 6.0, rightAxis: 0.6);
+            double r03v6 = MeanTurnRate(wind: 6.0, rightAxis: 0.3);
+
+            Assert.Greater(r03v6, 0.02);
+            Assert.AreEqual(2.0, r06v6 / r03v6, 0.8, "rate should roughly double with u");
+        }
+
+        private static double MeanTurnRate(double wind, double rightAxis)
+        {
+            RigidKiteSim sim = RigidKiteSim.HundredSixteen();
+            sim.Wind.Speed = wind;
+            RigidKiteState state = sim.SpawnDownwind(elevationY: 15.0);
+            for (double t = 0.0; t < 2.0; t += 1.0 / 50.0)
+                sim.Step(state, 1.0 / 50.0);
+
+            PilotHands.Apply(sim, Vec3.Zero, 0.0, rightAxis);
+            double h0 = sim.View(state).HeadingRad;
+            for (double t = 0.0; t < 1.0; t += 1.0 / 50.0)
+                sim.Step(state, 1.0 / 50.0);
+            return sim.View(state).HeadingRad - h0;
+        }
     }
 }
