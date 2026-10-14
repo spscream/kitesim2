@@ -74,5 +74,23 @@ namespace Kitesim.Core.Tests
             Assert.AreEqual(view.WorldPosition.Y, view.PilotPosition.Y + view.Direction.Y * view.LineLength, 1e-9);
             Assert.AreEqual(view.WorldPosition.Z, view.PilotPosition.Z + view.Direction.Z * view.LineLength, 1e-9);
         }
+
+        [Test]
+        public void PullingTheRightHandTurnsTheHeadingTowardThePilotsRight()
+        {
+            RigidKiteSim sim = RigidKiteSim.HundredSixteen();
+            sim.Wind.Speed = 6.0;
+            RigidKiteState state = sim.SpawnDownwind(elevationY: 15.0);
+            for (double t = 0.0; t < 2.0; t += 1.0 / 50.0)
+                sim.Step(state, 1.0 / 50.0);
+
+            double heading0 = sim.View(state).HeadingRad;
+            PilotHands.Apply(sim, Vec3.Zero, 0.0, 0.6);
+            for (double t = 0.0; t < 2.0; t += 1.0 / 50.0)
+                sim.Step(state, 1.0 / 50.0);
+
+            Assert.Greater(sim.View(state).HeadingRad, heading0 + 0.05,
+                "right pull must yaw toward +HeadingRad (pilot's right)");
+        }
     }
 }
