@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
+using Kitesim.Unity;
 
 namespace Kitesim.Unity.EditorTools
 {
@@ -48,7 +49,7 @@ namespace Kitesim.Unity.EditorTools
             else
                 return;
 
-            Keyboard keyboard = Keyboard.current;
+            Keyboard keyboard = WindowPilotDeviceAssignment.FirstKeyboard();
             if (keyboard == null || !keyboard.added)
                 return;
 

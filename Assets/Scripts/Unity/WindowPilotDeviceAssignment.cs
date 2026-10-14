@@ -130,7 +130,16 @@ namespace Kitesim.Unity
                 if (device is Keyboard keyboard)
                     return keyboard;
             }
+#if UNITY_EDITOR
+            // Unity 6 Play Mode on this project exposes FastMouse but never a
+            // FastKeyboard, even with Game view focused and
+            // AllDeviceInputAlwaysGoesToGameView. Without a Keyboard device every
+            // path — PlayerInput, OverlayKeyboard, the editor key forwarder — is a
+            // no-op. Add one so the catcher and QueueStateEvent have a target.
+            return InputSystem.AddDevice<Keyboard>();
+#else
             return null;
+#endif
         }
 
         public static InputDevice SelectDevice(int pilotIndex,

@@ -122,6 +122,24 @@ namespace Kitesim.Unity.EditorTests
         }
 
         [Test]
+        public void FirstKeyboardCreatesADeviceWhenNoneIsPresent()
+        {
+            var existing = new System.Collections.Generic.List<Keyboard>();
+            foreach (InputDevice device in InputSystem.devices)
+            {
+                if (device is Keyboard keyboard)
+                    existing.Add(keyboard);
+            }
+            foreach (Keyboard keyboard in existing)
+                InputSystem.RemoveDevice(keyboard);
+
+            Assert.IsNull(Keyboard.current, "precondition: no keyboard device");
+            Keyboard created = WindowPilotDeviceAssignment.FirstKeyboard();
+            Assert.IsNotNull(created);
+            Assert.IsTrue(created.added);
+        }
+
+        [Test]
         public void EmptyPilotZeroPicksUpAKeyboardThatAppearsLater()
         {
             var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>("Assets/kitesim.inputactions");
