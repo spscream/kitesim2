@@ -1,7 +1,7 @@
 namespace Kitesim.Core
 {
     /// <summary>
-    /// 6-DOF rigid kite on two inextensible 45 m lines. Gravity and distance
+    /// 6-DOF rigid kite on two compliant 45 m lines. Gravity and distance
     /// projection only: aero is a later slice. Does not replace WindowSim.
     /// </summary>
     public class RigidKiteSim
@@ -9,7 +9,8 @@ namespace Kitesim.Core
         public const double Substep = 0.002;
         public const double Gravity = 9.80665;
         public const double RestLength = 45.0;
-        public const int ProjectionIterations = 8;
+
+        public LineSystem Lines { get; private set; } = new LineSystem();
 
         public FrameInertia Inertia;
         public SailPanel[] Panels = System.Array.Empty<SailPanel>();
@@ -53,7 +54,8 @@ namespace Kitesim.Core
                 Inertia = inertia,
                 Panels = PanelAero.HundredSixteen(com),
                 TowLeftBody = left - com,
-                TowRightBody = right - com
+                TowRightBody = right - com,
+                Lines = new LineSystem()
             };
         }
 
@@ -64,7 +66,7 @@ namespace Kitesim.Core
             Vec3 fromPilot = new Vec3(0.0, elevationY, z);
             RigidKiteState state = RigidKiteState.At(pilot + fromPilot);
             state.Orientation = FacingPilot(fromPilot);
-            ProjectLines(state);
+            ProjectLines(state, Substep);
             return state;
         }
 
@@ -86,7 +88,7 @@ namespace Kitesim.Core
                 heading = heading.Normalized();
 
             bool landed = state.Position.Y < 0.15;
-            double tension = landed ? 0.5 : 50.0;
+            double tension = landed ? 0.0 : 0.5 * (Lines.TensionLeft + Lines.TensionRight);
             return new KiteStateView(
                 pilot,
                 direction,
@@ -137,7 +139,7 @@ namespace Kitesim.Core
             state.Position += state.Velocity * dt;
             state.Orientation = IntegrateBodyOmega(state.Orientation, state.Omega, dt);
 
-            ProjectLines(state);
+            ProjectLines(state, dt);
 
             if (state.Position.Y < 0.0)
                 state.Position = new Vec3(state.Position.X, 0.0, state.Position.Z);
@@ -149,46 +151,9 @@ namespace Kitesim.Core
                 state.Velocity = new Vec3(state.Velocity.X, 0.0, state.Velocity.Z);
         }
 
-        private void ProjectLines(RigidKiteState state)
+        private void ProjectLines(RigidKiteState state, double dt)
         {
-            for (int i = 0; i < ProjectionIterations; i++)
-            {
-                ProjectOne(state, HandLeft, TowLeftBody);
-                ProjectOne(state, HandRight, TowRightBody);
-            }
-        }
-
-        private void ProjectOne(RigidKiteState state, Vec3 hand, Vec3 rBody)
-        {
-            Vec3 r = state.Orientation * rBody;
-            Vec3 attach = state.Position + r;
-            Vec3 delta = attach - hand;
-            double dist = delta.Length();
-            if (dist < 1e-12)
-                return;
-
-            Vec3 n = delta / dist;
-            double c = dist - RestLength;
-            Vec3 rxn = Vec3.Cross(r, n);
-            Vec3 iinv = InverseInertiaWorld(state.Orientation, rxn);
-            double w = 1.0 / Inertia.Mass + Vec3.Dot(rxn, iinv);
-            if (w < 1e-15)
-                return;
-
-            double lambda = -c / w;
-            state.Position += n * (lambda / Inertia.Mass);
-            Vec3 dOmegaWorld = InverseInertiaWorld(state.Orientation, Vec3.Cross(r, n * lambda));
-            state.Orientation = RotateWorld(state.Orientation, dOmegaWorld);
-        }
-
-        private Vec3 InverseInertiaWorld(QuaternionD q, Vec3 torqueWorld)
-        {
-            Vec3 tBody = q.Conjugate() * torqueWorld;
-            Vec3 aBody = new Vec3(
-                tBody.X / Inertia.Ixx,
-                tBody.Y / Inertia.Iyy,
-                tBody.Z / Inertia.Izz);
-            return q * aBody;
+            Lines.Project(state, Inertia, HandLeft, TowLeftBody, HandRight, TowRightBody, dt);
         }
 
         private static QuaternionD IntegrateBodyOmega(QuaternionD q, Vec3 omega, double dt)
@@ -197,14 +162,6 @@ namespace Kitesim.Core
             if (angle < 1e-15)
                 return q;
             return (q * QuaternionD.AxisAngle(omega, angle)).Normalized();
-        }
-
-        private static QuaternionD RotateWorld(QuaternionD q, Vec3 rotVec)
-        {
-            double angle = rotVec.Length();
-            if (angle < 1e-15)
-                return q;
-            return (QuaternionD.AxisAngle(rotVec, angle) * q).Normalized();
         }
 
         private Vec3 Attach(RigidKiteState state, bool left)

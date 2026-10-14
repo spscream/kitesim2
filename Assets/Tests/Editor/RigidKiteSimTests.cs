@@ -5,7 +5,7 @@ namespace Kitesim.Core.Tests
     public class RigidKiteSimTests
     {
         [Test]
-        public void GravityOnlyKeepsBothLinesAtFortyFiveMetresAndAboveTheGround()
+        public void GravityOnlySettlesOnTheGroundWithSlackLines()
         {
             RigidKiteSim sim = RigidKiteSim.HundredSixteen();
             RigidKiteState state = sim.SpawnDownwind(elevationY: 15.0);
@@ -14,8 +14,10 @@ namespace Kitesim.Core.Tests
                 sim.Step(state, 1.0 / 50.0);
 
             Assert.GreaterOrEqual(state.Position.Y, -0.05, "must not fall through the ground");
-            Assert.AreEqual(45.0, sim.LineLength(state, left: true), 0.01);
-            Assert.AreEqual(45.0, sim.LineLength(state, left: false), 0.01);
+            Assert.AreEqual(0.0, sim.Lines.TensionLeft);
+            Assert.AreEqual(0.0, sim.Lines.TensionRight);
+            Assert.Less(sim.LineLength(state, left: true), LineSystem.RestLength);
+            Assert.Less(sim.LineLength(state, left: false), LineSystem.RestLength);
         }
 
         [Test]
@@ -45,8 +47,16 @@ namespace Kitesim.Core.Tests
             Assert.Greater(state.Position.Y, 1.0, "still hanging, not on the grass");
             Vec3 nose = state.Orientation * new Vec3(0.0, 0.0, 1.0);
             Assert.Greater(nose.Y, 0.0, "nose still points generally up");
-            Assert.AreEqual(45.0, sim.LineLength(state, left: true), 0.05);
-            Assert.AreEqual(45.0, sim.LineLength(state, left: false), 0.05);
+            AssertLineMatchesTension(sim, state, left: true);
+            AssertLineMatchesTension(sim, state, left: false);
+        }
+
+        private static void AssertLineMatchesTension(RigidKiteSim sim, RigidKiteState state, bool left)
+        {
+            double dist = sim.LineLength(state, left);
+            double tension = left ? sim.Lines.TensionLeft : sim.Lines.TensionRight;
+            Assert.GreaterOrEqual(dist, LineSystem.RestLength - 0.002);
+            Assert.AreEqual(LineSystem.RestLength + tension / LineSystem.Stiffness, dist, 0.03);
         }
 
         [Test]
